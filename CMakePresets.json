@@ -1,0 +1,29 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {"major": 3, "minor": 25, "patch": 0},
+  "configurePresets": [
+    {
+      "name": "infernux-jit",
+      "displayName": "Infernux internal Vulkan JIT compiler (migration build)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/infernux-jit",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "TI_WITH_PYTHON": "ON",
+        "TI_WITH_C_API": "OFF",
+        "TI_WITH_STATIC_C_API": "OFF",
+        "TI_WITH_LLVM": "OFF",
+        "TI_WITH_VULKAN": "OFF",
+        "TI_WITH_CUDA": "OFF",
+        "TI_WITH_METAL": "OFF",
+        "TI_WITH_OPENGL": "OFF",
+        "TI_BUILD_TESTS": "OFF",
+        "TI_BUILD_EXAMPLES": "OFF",
+        "TI_BUILD_RHI_EXAMPLES": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {"name": "infernux-jit", "configurePreset": "infernux-jit", "jobs": 4}
+  ]
+}

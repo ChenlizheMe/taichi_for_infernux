@@ -4,7 +4,10 @@
 
 cmake_minimum_required(VERSION 3.17)
 
-project(taichi)
+project(taichi_for_infernux)
+
+# Infernux modification: JIT-only engine dependency, not a plugin release.
+include(cmake/InfernuxJitPolicy.cmake)
 
 include("cmake/utils.cmake")
 
@@ -228,6 +231,11 @@ if (TI_BUILD_RHI_EXAMPLES)
   add_subdirectory(cpp_examples/rhi_examples)
 endif()
 
+
+include(cmake/InfernuxCompilerOutput.cmake)
+if(TI_WITH_PYTHON AND NOT ANDROID)
+    infernux_compiler_output(taichi_python)
+endif()
 
 option(TI_WITH_GRAPHVIZ "generate dependency graphs between targets" OFF)  # wheel-tag: viz
 if (TI_WITH_GRAPHVIZ)

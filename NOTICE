@@ -1,0 +1,16 @@
+Taichi for Infernux
+
+Derived from Taichi: https://github.com/taichi-dev/taichi
+Copyright (c) The Taichi Authors (2016- ). All Rights Reserved.
+Licensed under the Apache License, Version 2.0. See LICENSE.
+Original author and copyright notices are retained in the source.
+
+Infernux maintains this fork:
+https://github.com/ChenlizheMe/taichi_for_infernux
+https://github.com/ChenlizheMe/Infernux
+
+Infernux modifications begun in 2026 establish a JIT-only compiler build
+policy, engine-wheel output layout, and fork-specific documentation/CI.
+The ongoing integration narrows this dependency to Vulkan SPIR-V generation;
+buffer ownership, device management and execution belong to Infernux.
+This notice does not claim that the compiler-only migration is complete.

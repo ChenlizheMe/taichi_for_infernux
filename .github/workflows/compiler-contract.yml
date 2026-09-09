@@ -1,0 +1,22 @@
+name: Compiler packaging contract
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  policy:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: List JIT presets
+        run: cmake --list-presets
+      - name: Check JIT-only policy
+        run: cmake -P cmake/CheckInfernuxJitPolicy.cmake
+      - name: Check wheel output contract
+        run: cmake -S tests/compiler_output -B build/output-contract

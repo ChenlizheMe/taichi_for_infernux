@@ -81,6 +81,7 @@ _build
 !.github/**/*.yml
 *.dot
 *.json
+!CMakePresets.json
 !tests/**/*.json
 !docs/**/*.json
 imgui.ini

@@ -1,0 +1,7 @@
+include("${CMAKE_CURRENT_LIST_DIR}/InfernuxJitPolicy.cmake")
+foreach(feature C_API STATIC_C_API LLVM CUDA CUDA_TOOLKIT AMDGPU METAL OPENGL VULKAN DX11 DX12 GGUI)
+    if(TI_WITH_${feature})
+        message(FATAL_ERROR "Unexpected enabled feature: ${feature}")
+    endif()
+endforeach()
+message(STATUS "Infernux JIT-only build policy passed")
