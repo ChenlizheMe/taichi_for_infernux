@@ -29,8 +29,6 @@ file(GLOB TAICHI_CORE_SOURCE
     "taichi/struct/*"
     "taichi/system/*"
     "taichi/transforms/*"
-    "taichi/platform/cuda/*" "taichi/platform/amdgpu/*"
-    "taichi/platform/mac/*" "taichi/platform/windows/*"
     "taichi/runtime/*.h" "taichi/runtime/*.cpp"
 )
 # These are value descriptions used by lowering, not a device API library.
@@ -51,10 +49,9 @@ list(FILTER TAICHI_CORE_SOURCE EXCLUDE REGEX
 # for the compiler-only Vulkan path, so keeping this translation unit would
 # retain a dead LLVM-facing surface in the core target.
 list(FILTER TAICHI_CORE_SOURCE EXCLUDE REGEX "/jit/jit_session\\.cpp$")
-# Device-probe shims are part of Taichi's optional backend discovery surface.
-# Vulkan capability and device ownership come from Infernux RHI, so these
-# probes have no consumer in the compiler-only target.
-list(FILTER TAICHI_CORE_SOURCE EXCLUDE REGEX "/platform/(cuda/detect_cuda|amdgpu/detect_amdgpu|mac/objc_api)\\.cpp$")
+# Device-probe shims are intentionally not part of this source set. Vulkan
+# capability and device ownership come from the Infernux RHI; keeping the
+# optional backend directories out of the glob makes that boundary structural.
 
 set(CORE_LIBRARY_NAME taichi_core)
 add_library(${CORE_LIBRARY_NAME} OBJECT ${TAICHI_CORE_SOURCE})
