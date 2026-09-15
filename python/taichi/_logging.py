@@ -1,9 +1,3 @@
-import inspect
-import os
-
-from taichi._lib import core as ti_python_core
-
-
 def _get_logging(name):
     """Generates a decorator to decorate a specific logger function.
 
@@ -16,15 +10,9 @@ def _get_logging(name):
     """
 
     def logger(msg, *args, **kwargs):
-        # Python inspection takes time (~0.1ms) so avoid it as much as possible
-        if ti_python_core.logging_effective(name):
-            msg_formatted = msg.format(*args, **kwargs)
-            func = getattr(ti_python_core, name)
-            frame = inspect.currentframe().f_back
-            file_name, lineno, func_name, _, _ = inspect.getframeinfo(frame)
-            file_name = os.path.basename(file_name)
-            msg = f"[{file_name}:{func_name}@{lineno}] {msg_formatted}"
-            func(msg)
+        # Infernux owns engine diagnostics; the private compiler does not
+        # install a second logger or inspect Python frames on hot paths.
+        return None
 
     return logger
 
@@ -46,7 +34,7 @@ def set_logging_level(level):
 
         >>> set_logging_level('debug')
     """
-    ti_python_core.set_logging_level(level)
+    return None
 
 
 def is_logging_effective(level):
@@ -73,7 +61,7 @@ def is_logging_effective(level):
         >>> print(ti.is_logging_effective("error"))     # True
         >>> print(ti.is_logging_effective("critical"))  # True
     """
-    return ti_python_core.logging_effective(level)
+    return False
 
 
 # ------------------------

@@ -1,4 +1,5 @@
-from taichi._lib import core as ti_python_core
+# Modified by Infernux in 2026: private compiler-relative imports.
+from .._lib import core as ti_python_core
 
 is_signed = ti_python_core.is_signed
 

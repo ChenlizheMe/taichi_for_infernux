@@ -1,4 +1,7 @@
 #pragma once
+
+#include <regex>
+
 #include "taichi/program/program.h"
 #include "taichi/util/lang_util.h"
 

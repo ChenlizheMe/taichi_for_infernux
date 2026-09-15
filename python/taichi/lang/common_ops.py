@@ -1,6 +1,7 @@
-from taichi.lang import ops
-from taichi.lang.util import in_python_scope
-from taichi.types import primitive_types
+# Modified by Infernux in 2026: private compiler-relative imports.
+from . import ops
+from .util import in_python_scope
+from ..types import primitive_types
 from typing import TYPE_CHECKING
 
 

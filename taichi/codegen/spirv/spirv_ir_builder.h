@@ -1,13 +1,14 @@
 #pragma once
+// Modified by Infernux: compiler headers do not include the Catch test framework.
 
 #include <array>
 
 #include <spirv/unified1/spirv.hpp>
 #include "taichi/util/lang_util.h"
 #include "taichi/ir/type.h"
-#include "taichi/util/testing.h"
 #include "taichi/codegen/spirv/snode_struct_compiler.h"
-#include "taichi/rhi/device.h"
+#include "taichi/ir/texture_format.h"
+#include "taichi/rhi/device_capability.h"
 #include "taichi/ir/statements.h"
 
 namespace taichi::lang {

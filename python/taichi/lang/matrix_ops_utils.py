@@ -1,8 +1,9 @@
+# Modified by Infernux in 2026: private compiler-relative imports.
 import functools
 
-from taichi.lang.exception import TaichiCompilationError
-from taichi.lang.expr import Expr
-from taichi.lang.matrix import Matrix
+from .exception import TaichiCompilationError
+from .expr import Expr
+from .matrix import Matrix
 
 
 def do_check(checker_fns, *args, **kwargs):

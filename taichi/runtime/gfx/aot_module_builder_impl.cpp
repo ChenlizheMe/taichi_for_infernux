@@ -1,6 +1,7 @@
 #include "taichi/runtime/gfx/aot_module_builder_impl.h"
 
 #include <fstream>
+#include <filesystem>
 #include <type_traits>
 
 #include "taichi/aot/module_data.h"
@@ -32,7 +33,8 @@ std::string AotModuleBuilderImpl::write_spv_file(
     const TaskAttributes &k,
     const std::vector<uint32_t> &source_code) const {
   const std::string spv_path = fmt::format("{}/{}.spv", output_dir, k.name);
-  std::ofstream fs(spv_path, std::ios_base::binary | std::ios::trunc);
+  std::ofstream fs(std::filesystem::u8path(spv_path), std::ios_base::binary | std::ios::trunc);
+  fs.exceptions(std::ios::failbit | std::ios::badbit);
   fs.write((char *)source_code.data(), source_code.size() * sizeof(uint32_t));
   fs.close();
   return k.name + ".spv";
@@ -56,16 +58,20 @@ void AotModuleBuilderImpl::dump(const std::string &output_dir,
 
   {
     std::string json = liong::json::print(liong::json::serialize(ti_aot_data_));
-    std::fstream f(output_dir + "/metadata.json",
+    std::fstream f(std::filesystem::u8path(output_dir + "/metadata.json"),
                    std::ios::trunc | std::ios::out);
+    f.exceptions(std::ios::failbit | std::ios::badbit);
     f.write(json.data(), json.size());
+    f.close();
   }
 
   {
     std::string json = liong::json::print(liong::json::serialize(graphs_));
-    std::fstream f(output_dir + "/graphs.json",
+    std::fstream f(std::filesystem::u8path(output_dir + "/graphs.json"),
                    std::ios::trunc | std::ios::out);
+    f.exceptions(std::ios::failbit | std::ios::badbit);
     f.write(json.data(), json.size());
+    f.close();
   }
 }
 

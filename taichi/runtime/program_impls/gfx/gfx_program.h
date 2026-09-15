@@ -3,13 +3,22 @@
 #include "taichi/runtime/gfx/runtime.h"
 #include "taichi/runtime/gfx/snode_tree_manager.h"
 #include "taichi/program/program_impl.h"
+#include "taichi/inc/constants.h"
+#include <array>
 
 namespace taichi::lang {
 
 class GfxProgramImpl : public ProgramImpl {
  public:
-  explicit GfxProgramImpl(CompileConfig &config);
+  GfxProgramImpl(CompileConfig &config, std::shared_ptr<Device> device);
   ~GfxProgramImpl() override;
+
+  void materialize_runtime(KernelProfilerBase *profiler,
+                           uint64 **result_buffer_ptr) override;
+
+  void enqueue_compute_op_lambda(
+      std::function<void(Device *, CommandList *)> op,
+      const std::vector<ComputeOpImageRef> &image_refs) override;
 
   std::size_t get_snode_num_dynamically_allocated(
       SNode *snode,
@@ -32,9 +41,6 @@ class GfxProgramImpl : public ProgramImpl {
   StreamSemaphore flush() override {
     return runtime_->flush();
   }
-
-  std::unique_ptr<AotModuleBuilder> make_aot_module_builder(
-      const DeviceCapabilityConfig &caps) override;
 
   void destroy_snode_tree(SNodeTree *snode_tree) override {
     TI_ASSERT(snode_tree_mgr_ != nullptr);
@@ -77,13 +83,12 @@ class GfxProgramImpl : public ProgramImpl {
   };
 
   std::string get_kernel_argument_data_layout() override {
-    auto has_buffer_ptr = runtime_->get_ti_device()->get_caps().get(
+    const auto has_buffer_ptr = device_ && device_->get_caps().get(
         DeviceCapability::spirv_has_physical_storage_buffer);
     return "1" + std::string(has_buffer_ptr ? "b" : "-");
   };
 
   DeviceCapabilityConfig get_device_caps() override;
-
  protected:
   std::unique_ptr<KernelCompiler> make_kernel_compiler() override;
   std::unique_ptr<KernelLauncher> make_kernel_launcher() override;
@@ -93,6 +98,7 @@ class GfxProgramImpl : public ProgramImpl {
   std::unique_ptr<gfx::GfxRuntime> runtime_{nullptr};
   std::unique_ptr<gfx::SNodeTreeManager> snode_tree_mgr_{nullptr};
   std::vector<spirv::CompiledSNodeStructs> aot_compiled_snode_structs_;
+  std::array<uint64, taichi_result_buffer_entries> host_result_buffer_{};
 };
 
 }  // namespace taichi::lang

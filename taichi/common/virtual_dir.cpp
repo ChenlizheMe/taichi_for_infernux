@@ -1,5 +1,6 @@
 #include "taichi/common/virtual_dir.h"
 #include "taichi/common/zip.h"
+#include <filesystem>
 
 namespace taichi {
 namespace io {
@@ -25,7 +26,7 @@ struct FilesystemVirtualDir : public VirtualDir {
   }
 
   bool get_file_size(const std::string &path, size_t &size) const override {
-    std::fstream f(base_dir_ + path,
+    std::fstream f(std::filesystem::u8path(base_dir_ + path),
                    std::ios::in | std::ios::binary | std::ios::ate);
     if (!f.is_open()) {
       return false;
@@ -36,7 +37,7 @@ struct FilesystemVirtualDir : public VirtualDir {
   size_t load_file(const std::string &path,
                    void *data,
                    size_t size) const override {
-    std::fstream f(base_dir_ + path, std::ios::in | std::ios::binary);
+    std::fstream f(std::filesystem::u8path(base_dir_ + path), std::ios::in | std::ios::binary);
     if (!f.is_open()) {
       return false;
     }

@@ -1,20 +1,14 @@
 #pragma once
+// Modified by Infernux: public device declarations do not depend on logging/fmt.
 
 #include <string>
 #include <vector>
 #include <assert.h>
 #include <memory>
+#include <limits>
 
-// https://gcc.gnu.org/wiki/Visibility
-#if defined _WIN32 || defined _WIN64 || defined __CYGWIN__
-#ifdef __GNUC__
-#define RHI_DLL_EXPORT __attribute__((dllexport))
-#else
-#define RHI_DLL_EXPORT __declspec(dllexport)
-#endif  //  __GNUC__
-#else
-#define RHI_DLL_EXPORT __attribute__((visibility("default")))
-#endif  // defined _WIN32 || defined _WIN64 || defined __CYGWIN__
+// Legacy upstream runtime declarations. Not part of the Infernux compiler build.
+#define RHI_DLL_EXPORT
 
 // Unreachable
 #if __cplusplus > 202002L  // C++23
@@ -35,6 +29,7 @@
 
 #include "taichi/rhi/device_capability.h"
 #include "taichi/rhi/arch.h"
+#include "taichi/ir/texture_format.h"
 
 namespace taichi::lang {
 
@@ -260,12 +255,6 @@ enum class PolygonMode : int {
   Point = 2,
 };
 
-enum class BufferFormat : uint32_t {
-#define PER_BUFFER_FORMAT(x) x,
-#include "taichi/inc/rhi_constants.inc.h"
-#undef PER_BUFFER_FORMAT
-};
-
 class RHI_DLL_EXPORT Pipeline{public : virtual ~Pipeline(){}};
 
 using UPipeline = std::unique_ptr<Pipeline>;
@@ -359,7 +348,8 @@ class RHI_DLL_EXPORT CommandList {
    * submitted to. Other Streams or Devices may not observe this barrier.
    * @params[in] ptr The pointer to the start of the region
    * @params[in] size The size of the memory region.
-   *                  Size is clamped to the underlying buffer size.
+   *                  Infernux requires an in-bounds range; entire-size means
+   *                  the remaining allocation.
    */
   virtual void buffer_barrier(DevicePtr ptr, size_t size) noexcept = 0;
 
@@ -383,9 +373,8 @@ class RHI_DLL_EXPORT CommandList {
    * Insert a buffer copy operation into the command list.
    * @params[in] src The source Device Pointer
    * @params[in] dst The destination Device Pointer
-   * @params[in] size The size of the region to be copied.
-   *                  The size will be clamped to the minimum between
-   *                  `dst.size - dst.offset` and `src.size - src.offset`
+   * @params[in] size The exact size of the region to be copied. Infernux
+   * requires in-bounds, non-overlapping, four-byte-aligned copy regions.
    */
   virtual void buffer_copy(DevicePtr dst,
                            DevicePtr src,
@@ -399,9 +388,10 @@ class RHI_DLL_EXPORT CommandList {
    * - (Encouraged behavior) If the `size` is -1 (max of size_t) the underlying
    *   API might provide a faster code path.
    * @params[in] ptr The start of the memory region.
-   * - ptr.offset will be aligned down to a multiple of 4 bytes.
+   * - ptr.offset must be a multiple of 4 bytes.
    * @params[in] size The size of the region.
-   * - The size will be clamped to the underlying buffer's size.
+   * - Size must be in bounds and four-byte aligned; entire-size means the
+   * remaining allocation. Invalid ranges reject submission, not silently clamp.
    */
   virtual void buffer_fill(DevicePtr ptr,
                            size_t size,
@@ -535,11 +525,26 @@ class RHI_DLL_EXPORT CommandList {
   }
 };
 
+// Infernux: the compiler already produces these bindings for JIT and AOT.
+// Pass them through instead of reflecting the same SPIR-V a second time.
+enum class PipelineBindingType {
+  uniform_buffer,
+  storage_buffer,
+  sampled_image,
+  storage_image,
+};
+
+struct PipelineBinding {
+  uint32_t binding;
+  PipelineBindingType type;
+};
+
 struct PipelineSourceDesc {
   PipelineSourceType type;
   const void *data{nullptr};
   size_t size{0};
   PipelineStageType stage{PipelineStageType::compute};
+  std::vector<PipelineBinding> bindings;  // Compiler-owned descriptor set 0.
 };
 
 // FIXME: this probably isn't backend-neutral enough
@@ -712,6 +717,8 @@ class RHI_DLL_EXPORT Device {
 
   /**
    * Upload data to device allocations immediately.
+   * - Nonempty entries require four-byte-aligned device offsets and byte sizes.
+   * - The batch uses one packed staging allocation; zero-byte entries are ignored.
    * - This is a synchronous operation, function returns when upload is complete
    * - The host data pointers must be valid and large enough for the size of the
    * copy, otherwise this function might segfault
@@ -730,10 +737,12 @@ class RHI_DLL_EXPORT Device {
   virtual RhiResult upload_data(DevicePtr *device_ptr,
                                 const void **data,
                                 size_t *size,
-                                int num_alloc = 1) noexcept;
+                                int num_alloc = 1);
 
   /**
    * Read data from device allocations back to host immediately.
+   * - Nonempty entries require four-byte-aligned device offsets and byte sizes.
+   * - The batch uses one packed staging allocation; zero-byte entries are ignored.
    * - This is a synchronous operation, function returns when readback is
    * complete
    * - The host data pointers must be valid and large enough for the size of the
@@ -757,9 +766,9 @@ class RHI_DLL_EXPORT Device {
       void **data,
       size_t *size,
       int num_alloc = 1,
-      const std::vector<StreamSemaphore> &wait_sema = {}) noexcept;
+      const std::vector<StreamSemaphore> &wait_sema = {});
 
-  // Each thraed will acquire its own stream
+  // Infernux uses the host-owned serialized compute lane.
   virtual Stream *get_compute_stream() = 0;
 
   // Wait for all tasks to complete (task from all streams)
@@ -822,30 +831,11 @@ class RHI_DLL_EXPORT Device {
    */
   virtual void unmap(DeviceAllocation alloc) = 0;
 
-  // Directly share memory in the form of alias
-  static DeviceAllocation share_to(DeviceAllocation *alloc, Device *target);
-
   // Strictly intra device copy (synced)
   virtual void memcpy_internal(DevicePtr dst, DevicePtr src, uint64_t size) = 0;
 
-  // Copy memory inter or intra devices (synced)
-  enum class MemcpyCapability { Direct, RequiresStagingBuffer, RequiresHost };
-
-  static MemcpyCapability check_memcpy_capability(DevicePtr dst,
-                                                  DevicePtr src,
-                                                  uint64_t size);
-
+  // Infernux owns one host device. No CPU/CUDA/standalone Vulkan copy dispatch.
   static void memcpy_direct(DevicePtr dst, DevicePtr src, uint64_t size);
-
-  static void memcpy_via_staging(DevicePtr dst,
-                                 DevicePtr staging,
-                                 DevicePtr src,
-                                 uint64_t size);
-
-  static void memcpy_via_host(DevicePtr dst,
-                              void *host_buffer,
-                              DevicePtr src,
-                              uint64_t size);
 
   // Get all supported capabilities of the current created device.
   virtual Arch arch() const = 0;
@@ -1009,16 +999,3 @@ class RHI_DLL_EXPORT GraphicsDevice : public Device {
 };
 
 }  // namespace taichi::lang
-
-template <>
-class fmt::formatter<taichi::lang::RhiResult> {
- public:
-  constexpr auto parse(format_parse_context &ctx) {
-    return ctx.begin();
-  }
-  template <typename Context>
-  constexpr auto format(taichi::lang::RhiResult const &res,
-                        Context &ctx) const {
-    return format_to(ctx.out(), taichi::lang::rhi_result_to_string(res));
-  }
-};

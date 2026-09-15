@@ -2,7 +2,6 @@
 
 #include <thread>
 #include "taichi/rhi/arch.h"
-#include "taichi/util/offline_cache.h"
 
 namespace taichi::lang {
 
@@ -72,7 +71,6 @@ void CompileConfig::fit() {
   if (arch_uses_spirv(arch)) {
     demote_dense_struct_fors = true;
   }
-  offline_cache::disable_offline_cache_if_needed(this);
 }
 
 }  // namespace taichi::lang

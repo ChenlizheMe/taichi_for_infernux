@@ -1,12 +1,13 @@
+# Modified by Infernux in 2026: private compiler-relative imports.
 import numpy as np
-from taichi._lib import core as _ti_core
-from taichi.lang import impl
-from taichi.lang.common_ops import TaichiOperations
-from taichi.lang.exception import TaichiCompilationError, TaichiTypeError
-from taichi.lang.matrix import make_matrix
-from taichi.lang.util import is_matrix_class, is_taichi_class, to_numpy_type
-from taichi.types import primitive_types
-from taichi.types.primitive_types import integer_types, real_types
+from .._lib import core as _ti_core
+from . import impl
+from .common_ops import TaichiOperations
+from .exception import TaichiCompilationError, TaichiTypeError
+from .matrix import make_matrix
+from .util import is_matrix_class, is_taichi_class, to_numpy_type
+from ..types import primitive_types
+from ..types.primitive_types import integer_types, real_types
 
 
 # Scalar, basic data type
@@ -141,7 +142,7 @@ def make_var_list(size, ast_builder=None):
 
 
 def make_expr_group(*exprs):
-    from taichi.lang.matrix import Matrix  # pylint: disable=C0415
+    from .matrix import Matrix  # pylint: disable=C0415
 
     if len(exprs) == 1:
         if isinstance(exprs[0], (list, tuple)):

@@ -37,8 +37,4 @@ template = Template
 """
 
 
-class sparse_matrix_builder:
-    pass
-
-
-__all__ = ["template", "sparse_matrix_builder"]
+__all__ = ["template"]

@@ -1,16 +1,18 @@
+// Modified for Infernux: engine-owned pipeline caches and stream completion.
 #include "taichi/runtime/gfx/runtime.h"
 #include "taichi/program/program.h"
-#include "taichi/common/filesystem.hpp"
 
 // FIXME: (penguinliong) Special offer for `run_codegen`. Find a new home for it
 // in the future.
 #include "taichi/codegen/spirv/spirv_codegen.h"
 
-#include <chrono>
 #include <array>
 #include <iostream>
+#include <iterator>
 #include <memory>
+#include <map>
 #include <optional>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -58,6 +60,7 @@ class HostDeviceContextBlitter {
     TI_ASSERT(device_->map(*device_args_buffer_, &device_base) ==
               RhiResult::success);
 
+    std::unordered_set<const void *> uploaded;
     for (int i = 0; i < ctx_attribs_->args().size(); ++i) {
       const auto &arg_kv = ctx_attribs_->args()[i];
       const auto &indices = arg_kv.first;
@@ -66,22 +69,16 @@ class HostDeviceContextBlitter {
         if (host_ctx_.device_allocation_type[indices] ==
                 LaunchContextBuilder::DevAllocType::kNone &&
             ext_arr_size.at(indices)) {
-          // Only need to blit ext arrs (host array)
-          auto access_it = std::find_if(ctx_attribs_->arr_access.begin(),
-                                        ctx_attribs_->arr_access.end(),
-                                        [indices](const auto &pair) -> bool {
-                                          return pair.first == indices;
-                                        });
-          TI_ASSERT(access_it != ctx_attribs_->arr_access.end());
-          uint32_t access = uint32_t(access_it->second);
-          if (access & uint32_t(irpass::ExternalPtrAccess::READ)) {
+          // WRITE does not prove that the kernel overwrites every element.
+          // Preserve untouched bytes and upload identical host spans only once.
+          auto data_ptr_idx = indices;
+          data_ptr_idx.push_back(TypeFactory::DATA_PTR_POS_IN_NDARRAY);
+          const void *host_ptr = host_ctx_.array_ptrs.at(data_ptr_idx);
+          if (uploaded.insert(host_ptr).second) {
             DeviceAllocation buffer = ext_arrays.at(indices);
             void *device_arr_ptr{nullptr};
             TI_ASSERT(device_->map(buffer, &device_arr_ptr) ==
                       RhiResult::success);
-            auto data_ptr_idx = indices;
-            data_ptr_idx.push_back(TypeFactory::DATA_PTR_POS_IN_NDARRAY);
-            const void *host_ptr = host_ctx_.array_ptrs[data_ptr_idx];
             std::memcpy(device_arr_ptr, host_ptr, ext_arr_size.at(indices));
             device_->unmap(buffer);
           }
@@ -127,6 +124,7 @@ class HostDeviceContextBlitter {
     std::vector<DevicePtr> readback_dev_ptrs;
     std::vector<void *> readback_host_ptrs;
     std::vector<size_t> readback_sizes;
+    std::unordered_set<void *> readback_hosts;
 
     for (int i = 0; i < ctx_attribs_->args().size(); ++i) {
       const auto &kv = ctx_attribs_->args()[i];
@@ -145,10 +143,14 @@ class HostDeviceContextBlitter {
         uint32_t access = uint32_t(access_it->second);
         if (access & uint32_t(irpass::ExternalPtrAccess::WRITE)) {
           // Only need to blit ext arrs (host array)
-          readback_dev_ptrs.push_back(ext_arrays.at(indices).get_ptr(0));
           auto data_ptr_idx = indices;
           data_ptr_idx.push_back(TypeFactory::DATA_PTR_POS_IN_NDARRAY);
-          readback_host_ptrs.push_back(host_ctx_.array_ptrs[data_ptr_idx]);
+          void *host_ptr = host_ctx_.array_ptrs.at(data_ptr_idx);
+          if (!readback_hosts.insert(host_ptr).second) {
+            continue;
+          }
+          readback_dev_ptrs.push_back(ext_arrays.at(indices).get_ptr(0));
+          readback_host_ptrs.push_back(host_ptr);
           // TODO: readback grad_ptrs as well once ndarray ad is supported
           readback_sizes.push_back(ext_arr_size.at(indices));
           require_sync = true;
@@ -161,9 +163,8 @@ class HostDeviceContextBlitter {
         StreamSemaphore command_complete_sema =
             device_->get_compute_stream()->submit(cmdlist);
 
-        device_->wait_idle();
-
-        // In this case `readback_data` syncs
+        // readback_data waits for this submission and completes its copies;
+        // unrelated rendering work on the host device must not be drained.
         TI_ASSERT(device_->readback_data(
                       readback_dev_ptrs.data(), readback_host_ptrs.data(),
                       readback_sizes.data(), int(readback_sizes.size()),
@@ -248,8 +249,24 @@ CompiledTaichiKernel::CompiledTaichiKernel(const Params &ti_params)
     PipelineSourceDesc source_desc{PipelineSourceType::spirv_binary,
                                    (void *)spirv_bins[i].data(),
                                    spirv_bins[i].size() * sizeof(uint32_t)};
+    for (const auto &binding : task_attribs[i].buffer_binds) {
+      const auto type = binding.buffer.type;
+      source_desc.bindings.push_back({
+          static_cast<uint32_t>(binding.binding),
+          type == BufferType::Args || type == BufferType::ArgPack
+              ? PipelineBindingType::uniform_buffer
+              : PipelineBindingType::storage_buffer});
+    }
+    for (const auto &binding : task_attribs[i].texture_binds) {
+      source_desc.bindings.push_back({
+          static_cast<uint32_t>(binding.binding),
+          binding.is_storage ? PipelineBindingType::storage_image
+                             : PipelineBindingType::sampled_image});
+    }
     auto [vp, res] = ti_params.device->create_pipeline_unique(
-        source_desc, task_attribs[i].name, ti_params.backend_cache);
+        source_desc, task_attribs[i].name);
+    TI_ASSERT_INFO(res == RhiResult::success && vp != nullptr,
+                   "Failed to create compute pipeline {}", task_attribs[i].name);
     pipelines_.push_back(std::move(vp));
   }
 }
@@ -276,44 +293,13 @@ Pipeline *CompiledTaichiKernel::get_pipeline(int i) {
 
 GfxRuntime::GfxRuntime(const Params &params)
     : device_(params.device), profiler_(params.profiler) {
-  current_cmdlist_pending_since_ = high_res_clock::now();
   init_nonroot_buffers();
 
-  // Read pipeline cache from disk if available.
-  std::filesystem::path cache_path(get_repo_dir());
-  cache_path /= "rhi_cache.bin";
-  std::vector<char> cache_data;
-  if (std::filesystem::exists(cache_path)) {
-    TI_TRACE("Loading pipeline cache from {}", cache_path.generic_string());
-    std::ifstream cache_file(cache_path, std::ios::binary);
-    cache_data.assign(std::istreambuf_iterator<char>(cache_file),
-                      std::istreambuf_iterator<char>());
-  } else {
-    TI_TRACE("Pipeline cache not found at {}", cache_path.generic_string());
-  }
-  auto [cache, res] = device_->create_pipeline_cache_unique(cache_data.size(),
-                                                            cache_data.data());
-  if (res == RhiResult::success) {
-    backend_cache_ = std::move(cache);
-  }
+  // Pipeline persistence belongs to the engine RHI adapter, not ~/.taichi.
 }
 
 GfxRuntime::~GfxRuntime() {
   synchronize();
-
-  // Write pipeline cache back to disk.
-  if (backend_cache_) {
-    uint8_t *cache_data = (uint8_t *)backend_cache_->data();
-    size_t cache_size = backend_cache_->size();
-    if (cache_data) {
-      std::filesystem::path cache_path =
-          std::filesystem::path(get_repo_dir()) / "rhi_cache.bin";
-      std::ofstream cache_file(cache_path, std::ios::binary | std::ios::trunc);
-      std::ostreambuf_iterator<char> output_iterator(cache_file);
-      std::copy(cache_data, cache_data + cache_size, output_iterator);
-    }
-    backend_cache_.reset();
-  }
 
   {
     decltype(ti_kernels_) tmp;
@@ -331,11 +317,10 @@ GfxRuntime::KernelHandle GfxRuntime::register_taichi_kernel(
   params.device = device_;
   params.root_buffers = {};
   for (int root = 0; root < root_buffers_.size(); ++root) {
-    params.root_buffers.push_back(root_buffers_[root].get());
+    params.root_buffers.push_back(root_buffers_[root].allocation.get());
   }
   params.global_tmps_buffer = global_tmps_buffer_.get();
   params.listgen_buffer = listgen_buffer_.get();
-  params.backend_cache = backend_cache_.get();
 
   for (int i = 0; i < reg_params.task_spirv_source_codes.size(); ++i) {
     const auto &spirv_src = reg_params.task_spirv_source_codes[i];
@@ -407,6 +392,10 @@ void GfxRuntime::launch_kernel(KernelHandle handle,
   std::unordered_map<std::vector<int>, size_t,
                      hashing::Hasher<std::vector<int>>>
       ext_array_size;
+  // One host memory span is one GPU allocation, independent of parameter name.
+  // Different overlapping views need an offset-aware resource ABI; until then
+  // reject them before recording work rather than silently breaking aliasing.
+  std::map<uintptr_t, std::pair<size_t, DeviceAllocation>> external_buffers;
   std::unordered_map<std::vector<int>, DeviceAllocation,
                      hashing::Hasher<std::vector<int>>>
       textures;
@@ -455,23 +444,32 @@ void GfxRuntime::launch_kernel(KernelHandle handle,
           }
         } else {
           ext_array_size[indices] = host_ctx.array_runtime_sizes[indices];
-          auto arr_access =
-              ti_kernel->ti_kernel_attribs().ctx_attribs.arr_access;
-          auto access_it = std::find_if(arr_access.begin(), arr_access.end(),
-                                        [indices](const auto &pair) -> bool {
-                                          return pair.first == indices;
-                                        });
-          TI_ASSERT(access_it != arr_access.end());
-          uint32_t access = uint32_t(access_it->second);
+          auto data_ptr_indices = indices;
+          data_ptr_indices.push_back(TypeFactory::DATA_PTR_POS_IN_NDARRAY);
+          const auto address = reinterpret_cast<uintptr_t>(host_ctx.array_ptrs.at(data_ptr_indices));
+          const auto bytes = ext_array_size.at(indices);
+          if (bytes) {
+            auto next = external_buffers.lower_bound(address);
+            if (next != external_buffers.end() && next->first == address && next->second.first == bytes) {
+              any_arrays[indices] = next->second.second;
+              continue;
+            }
+            const bool overlaps_next = next != external_buffers.end() && next->first - address < bytes;
+            const bool overlaps_previous = next != external_buffers.begin() &&
+                address - std::prev(next)->first < std::prev(next)->second.first;
+            if (overlaps_next || overlaps_previous) {
+              throw std::invalid_argument("Partially overlapping host arrays require an offset-aware GPU binding");
+            }
+          }
           // Alloc ext arr
-          size_t alloc_size = std::max(size_t(32), ext_array_size.at(indices));
-          bool host_write = access & uint32_t(irpass::ExternalPtrAccess::READ);
+          size_t alloc_size = std::max(size_t(32), bytes);
           auto [allocated, res] = device_->allocate_memory_unique(
-              {alloc_size, host_write, false, /*export_sharing=*/false,
+              {alloc_size, /*host_write=*/true, false, /*export_sharing=*/false,
                AllocUsage::Storage});
           TI_ASSERT_INFO(res == RhiResult::success,
                          "Failed to allocate ext arr buffer");
           any_arrays[indices] = *allocated.get();
+          if (bytes) external_buffers.emplace(address, std::make_pair(bytes, any_arrays.at(indices)));
           ctx_buffers_.push_back(std::move(allocated));
         }
       }
@@ -590,7 +588,6 @@ void GfxRuntime::launch_kernel(KernelHandle handle,
     }
   }
 
-  submit_current_cmdlist_if_timeout();
 }
 
 void GfxRuntime::buffer_copy(DevicePtr dst, DevicePtr src, size_t size) {
@@ -636,7 +633,7 @@ void GfxRuntime::transition_image(DeviceAllocation image, ImageLayout layout) {
 
 void GfxRuntime::synchronize() {
   flush();
-  device_->wait_idle();
+  device_->get_compute_stream()->command_sync();
   // Profiler support
   if (profiler_) {
     device_->profiler_sync();
@@ -647,23 +644,15 @@ void GfxRuntime::synchronize() {
   }
   ctx_buffers_.clear();
   ndarrays_in_use_.clear();
-  fflush(stdout);
 }
 
 StreamSemaphore GfxRuntime::flush() {
-  StreamSemaphore sema;
   if (current_cmdlist_) {
-    sema = device_->get_compute_stream()->submit(current_cmdlist_.get());
+    last_submission_ = device_->get_compute_stream()->submit(current_cmdlist_.get());
     current_cmdlist_ = nullptr;
     ctx_buffers_.clear();
-  } else {
-    auto [cmdlist, res] =
-        device_->get_compute_stream()->new_command_list_unique();
-    TI_ASSERT(res == RhiResult::success);
-    cmdlist->memory_barrier();
-    sema = device_->get_compute_stream()->submit(cmdlist.get());
   }
-  return sema;
+  return last_submission_;
 }
 
 Device *GfxRuntime::get_ti_device() const {
@@ -673,25 +662,10 @@ Device *GfxRuntime::get_ti_device() const {
 void GfxRuntime::ensure_current_cmdlist() {
   // Create new command list if current one is nullptr
   if (!current_cmdlist_) {
-    current_cmdlist_pending_since_ = high_res_clock::now();
     auto [cmdlist, res] =
         device_->get_compute_stream()->new_command_list_unique();
     TI_ASSERT(res == RhiResult::success);
     current_cmdlist_ = std::move(cmdlist);
-  }
-}
-
-void GfxRuntime::submit_current_cmdlist_if_timeout() {
-  // If we have accumulated some work but does not require sync
-  // and if the accumulated cmdlist has been pending for some time
-  // launch the cmdlist to start processing.
-  if (current_cmdlist_) {
-    constexpr uint64_t max_pending_time = 2000;  // 2000us = 2ms
-    auto duration = high_res_clock::now() - current_cmdlist_pending_since_;
-    if (std::chrono::duration_cast<std::chrono::microseconds>(duration)
-            .count() > max_pending_time) {
-      flush();
-    }
   }
 }
 
@@ -744,24 +718,20 @@ void GfxRuntime::add_root_buffer(size_t root_buffer_size) {
   cmdlist->buffer_fill(new_buffer->get_ptr(0), kBufferSizeEntireSize,
                        /*data=*/0);
   stream->submit_synced(cmdlist.get());
-  root_buffers_.push_back(std::move(new_buffer));
-  // cache the root buffer size
-  root_buffers_size_map_[root_buffers_.back().get()] = root_buffer_size;
+  root_buffers_.push_back({std::move(new_buffer), root_buffer_size});
 }
 
 DeviceAllocation *GfxRuntime::get_root_buffer(int id) const {
-  if (id >= root_buffers_.size()) {
+  if (id < 0 || size_t(id) >= root_buffers_.size() ||
+      !root_buffers_[id].allocation) {
     TI_ERROR("root buffer id {} not found", id);
   }
-  return root_buffers_[id].get();
+  return root_buffers_[id].allocation.get();
 }
 
 size_t GfxRuntime::get_root_buffer_size(int id) const {
-  auto it = root_buffers_size_map_.find(root_buffers_[id].get());
-  if (id >= root_buffers_.size() || it == root_buffers_size_map_.end()) {
-    TI_ERROR("root buffer id {} not found", id);
-  }
-  return it->second;
+  get_root_buffer(id);  // One live-root check before indexing, also used by accessors.
+  return root_buffers_[id].byte_size;
 }
 
 void GfxRuntime::enqueue_compute_op_lambda(

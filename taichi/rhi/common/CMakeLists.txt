@@ -1,4 +1,5 @@
 # ./taichi/rhi/common/CMakeLists.txt
+# Modified by the Infernux project in 2026 to decouple Vulkan from GLFW.
 
 set(COMMON_RHI common_rhi)
 add_library(${COMMON_RHI})
@@ -14,7 +15,7 @@ target_include_directories(${COMMON_RHI}
     ${PROJECT_SOURCE_DIR}
   )
 
-if (TI_WITH_OPENGL OR TI_WITH_VULKAN AND NOT ANDROID)
+if (TI_WITH_OPENGL OR TI_WITH_GGUI AND NOT ANDROID)
   target_compile_definitions(${COMMON_RHI} PUBLIC TI_WITH_GLFW)
 
   target_include_directories(${COMMON_RHI}

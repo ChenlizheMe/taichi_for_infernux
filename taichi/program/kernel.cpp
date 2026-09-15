@@ -1,15 +1,9 @@
 #include "taichi/program/kernel.h"
 
-#include "taichi/rhi/cuda/cuda_driver.h"
-#include "taichi/codegen/codegen.h"
 #include "taichi/common/logging.h"
 #include "taichi/common/task.h"
 #include "taichi/ir/statements.h"
 #include "taichi/program/program.h"
-
-#ifdef TI_WITH_LLVM
-#include "taichi/runtime/program_impls/llvm/llvm_program.h"
-#endif
 
 namespace taichi::lang {
 
@@ -54,42 +48,6 @@ Kernel::Kernel(Program &program,
     name = primal_name + "_validate_grad";
   } else {
     TI_ERROR("Unsupported autodiff mode");
-  }
-}
-
-LaunchContextBuilder Kernel::make_launch_context() {
-  return LaunchContextBuilder(this);
-}
-
-template <typename T>
-T Kernel::fetch_ret(DataType dt, int i) {
-  if (dt->is_primitive(PrimitiveTypeID::f32)) {
-    return (T)program->fetch_result<float32>(i);
-  } else if (dt->is_primitive(PrimitiveTypeID::f64)) {
-    return (T)program->fetch_result<float64>(i);
-  } else if (dt->is_primitive(PrimitiveTypeID::i32)) {
-    return (T)program->fetch_result<int32>(i);
-  } else if (dt->is_primitive(PrimitiveTypeID::i64)) {
-    return (T)program->fetch_result<int64>(i);
-  } else if (dt->is_primitive(PrimitiveTypeID::i8)) {
-    return (T)program->fetch_result<int8>(i);
-  } else if (dt->is_primitive(PrimitiveTypeID::i16)) {
-    return (T)program->fetch_result<int16>(i);
-  } else if (dt->is_primitive(PrimitiveTypeID::u1)) {
-    return (T)program->fetch_result<uint1>(i);
-  } else if (dt->is_primitive(PrimitiveTypeID::u8)) {
-    return (T)program->fetch_result<uint8>(i);
-  } else if (dt->is_primitive(PrimitiveTypeID::u16)) {
-    return (T)program->fetch_result<uint16>(i);
-  } else if (dt->is_primitive(PrimitiveTypeID::u32)) {
-    return (T)program->fetch_result<uint32>(i);
-  } else if (dt->is_primitive(PrimitiveTypeID::u64)) {
-    return (T)program->fetch_result<uint64>(i);
-  } else if (dt->is_primitive(PrimitiveTypeID::f16)) {
-    // use f32 to interact with python
-    return (T)program->fetch_result<float32>(i);
-  } else {
-    TI_NOT_IMPLEMENTED
   }
 }
 

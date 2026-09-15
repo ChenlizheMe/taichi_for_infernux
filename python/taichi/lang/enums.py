@@ -1,4 +1,5 @@
-from taichi._lib import core as _ti_core
+# Modified by Infernux in 2026: private compiler-relative imports.
+from .._lib import core as _ti_core
 
 Layout = _ti_core.Layout
 AutodiffMode = _ti_core.AutodiffMode

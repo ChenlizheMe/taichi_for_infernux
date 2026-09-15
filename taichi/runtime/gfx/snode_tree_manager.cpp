@@ -1,3 +1,4 @@
+// Modified for Infernux: use the runtime's authoritative root-buffer entries.
 #include "taichi/runtime/gfx/snode_tree_manager.h"
 
 #include "taichi/runtime/gfx/runtime.h"
@@ -25,7 +26,7 @@ void SNodeTreeManager::destroy_snode_tree(SNodeTree *snode_tree) {
   if (root_id == -1) {
     TI_ERROR("the tree to be destroyed cannot be found");
   }
-  runtime_->root_buffers_[root_id].reset();
+  runtime_->root_buffers_[root_id].allocation.reset();
 }
 
 size_t SNodeTreeManager::get_field_in_tree_offset(int tree_id,
@@ -47,7 +48,7 @@ size_t SNodeTreeManager::get_field_in_tree_offset(int tree_id,
 }
 
 DevicePtr SNodeTreeManager::get_snode_tree_device_ptr(int tree_id) {
-  return runtime_->root_buffers_[tree_id]->get_ptr();
+  return runtime_->get_root_buffer(tree_id)->get_ptr();
 }
 
 }  // namespace gfx

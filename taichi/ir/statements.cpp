@@ -388,6 +388,11 @@ std::string OffloadedStmt::task_type_name(TaskType tt) {
 
 std::unique_ptr<Stmt> OffloadedStmt::clone() const {
   auto new_stmt = std::make_unique<OffloadedStmt>(task_type, device, kernel_);
+  // Infernux: retain task metadata; analysis::clone remaps statement uses.
+  new_stmt->ret_type = ret_type;
+  new_stmt->dbg_info = dbg_info;
+  new_stmt->end_stmt = end_stmt;
+  new_stmt->range_hint = range_hint;
   new_stmt->snode = snode;
   new_stmt->begin_offset = begin_offset;
   new_stmt->end_offset = end_offset;

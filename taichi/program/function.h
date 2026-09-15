@@ -32,10 +32,6 @@ class Function : public Callable {
 
   [[nodiscard]] std::string get_name() const override;
 
-  const std::optional<std::string> &try_get_ast_serialization_data() const {
-    return ast_serialization_data_;
-  }
-
   void set_ir_stage(IRStage type) {
     ir_stage_ = type;
   }
@@ -48,7 +44,6 @@ class Function : public Callable {
 
  private:
   IRStage ir_stage_{IRStage::None};
-  std::optional<std::string> ast_serialization_data_;  // For generating AST-Key
 };
 
 }  // namespace taichi::lang

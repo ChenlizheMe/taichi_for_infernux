@@ -1,18 +1,12 @@
+# Modified by Infernux in 2026: private compiler-relative imports.
 import functools
-import os
-import sys
 
-from taichi._lib import core as _ti_core
-from taichi._logging import info
+from .._lib import core as _ti_core
+from .._logging import info
 
+# Infernux owns diagnostics and does not carry Taichi's process-global Python
+# print buffer. Kernel print is outside the engine compute authoring surface.
 pybuf_enabled = False
-_env_enable_pybuf = os.environ.get("TI_ENABLE_PYBUF", "1")
-if not _env_enable_pybuf or int(_env_enable_pybuf):
-    # When using in Jupyter / IDLE, the sys.stdout will be their wrapped ones.
-    # While sys.__stdout__ should always be the raw console stdout.
-    pybuf_enabled = sys.stdout is not sys.__stdout__
-
-_ti_core.toggle_python_print_buffer(pybuf_enabled)
 
 
 def _shell_pop_print(old_call):

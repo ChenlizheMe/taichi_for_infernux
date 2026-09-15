@@ -1,3 +1,4 @@
+# Modified by Infernux in 2026: internal compiler autodiff only; no Torch tensor path.
 """Taichi automatic differentiation module.
 
 This module supplies two decorators for users to customize their
@@ -212,16 +213,7 @@ class Tape:
                 )
             self.loss.fill(0.0)
         else:
-            import torch  # pylint: disable=C0415
-
-            if self.loss.numel() != 1:
-                raise RuntimeError("The loss of `Tape` must be a tensor only contains one element")
-            if not self.loss.requires_grad:
-                raise RuntimeError(
-                    "Gradients of loss are not allocated, please set requires_grad=True for all tensors that are required by autodiff."
-                )
-            with torch.no_grad():
-                self.loss.fill_(0.0)
+            raise TypeError("Compiler autodiff requires an internal Field or Ndarray loss")
 
         # Attach the context manager to runtime
         self.runtime.target_tape = self
@@ -251,16 +243,7 @@ class Tape:
         assert not self.gradient_evaluated, "Gradients of grad can be evaluated only once."
 
         # Set grad for loss
-        if isinstance(self.loss, (Field, Ndarray)):
-            self.loss.grad.fill(1.0)
-        else:
-            import torch  # pylint: disable=C0415
-
-            if self.loss.grad is None:
-                self.loss.grad = torch.ones_like(self.loss)
-            else:
-                with torch.no_grad():
-                    self.loss.grad.fill_(1.0)
+        self.loss.grad.fill(1.0)
 
         for func, args in reversed(self.calls):
             # we need to check whether "func" has "grad" attribute

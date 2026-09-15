@@ -22,6 +22,12 @@ class StatementUsageReplace : public IRVisitor {
 
   void visit(Stmt *stmt) override {
     stmt->replace_operand_with(old_stmt, new_stmt);
+    // The argument-derived range end lives inside the offload body, so it
+    // is metadata rather than a dominating input operand. It must still
+    // follow replacements made by lowering/CSE, like every other IR use.
+    if (auto *offload = stmt->cast<OffloadedStmt>(); offload && offload->end_stmt == old_stmt) {
+      offload->end_stmt = new_stmt;
+    }
   }
 
   void visit(WhileStmt *stmt) override {
@@ -58,6 +64,7 @@ class StatementUsageReplace : public IRVisitor {
   }
 
   void visit(OffloadedStmt *stmt) override {
+    visit(static_cast<Stmt *>(stmt));
     stmt->all_blocks_accept(this);
   }
 
@@ -77,7 +84,7 @@ class StatementUsageReplace : public IRVisitor {
     // statements outside old_stmt->parent: bottom-up
     while (current_block != nullptr) {
       for (auto &stmt : current_block->statements) {
-        stmt->replace_operand_with(old_stmt, new_stmt);
+        replacer.visit(stmt.get());
       }
       current_block = current_block->parent_block();
     }

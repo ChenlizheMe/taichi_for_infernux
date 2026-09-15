@@ -2,34 +2,27 @@
 
 #include <memory>
 
-#include "taichi/codegen/kernel_compiler.h"
-#include "taichi/codegen/compiled_kernel_data.h"
-#include "taichi/codegen/spirv/snode_struct_compiler.h"
+#include "taichi/program/kernel.h"
+#include "taichi/program/compile_config.h"
+#include "taichi/rhi/device_capability.h"
+#include "taichi/codegen/spirv/compiled_kernel_data.h"
 
 namespace taichi::lang {
 namespace spirv {
 
-class KernelCompiler : public lang::KernelCompiler {
+// A stateless transformation, not a selectable execution backend.
+class KernelCompiler final {
  public:
-  struct Config {
-    // NOTE: Ideally, compiled_struct_data should be used as an argument to
-    // KernelCompiler::compile, but this necessitates the use of a unified
-    // structure to represent the compiled struct.
-    const std::vector<CompiledSNodeStructs> *compiled_struct_data{nullptr};
-  };
-
-  explicit KernelCompiler(Config config);
+  using IRNodePtr = std::unique_ptr<IRNode>;
+  using CKDPtr = std::unique_ptr<CompiledKernelData>;
 
   IRNodePtr compile(const CompileConfig &compile_config,
-                    const Kernel &kernel_def) const override;
+                    const Kernel &kernel_def) const;
 
   CKDPtr compile(const CompileConfig &compile_config,
                  const DeviceCapabilityConfig &device_caps,
                  const Kernel &kernel_def,
-                 IRNode &chi_ir) const override;
-
- private:
-  Config config_;
+                 IRNode &chi_ir) const;
 };
 
 }  // namespace spirv

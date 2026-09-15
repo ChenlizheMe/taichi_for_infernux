@@ -1,12 +1,13 @@
+# Modified by Infernux in 2026: private compiler-relative imports.
 import collections.abc
 from typing import Iterable
 
 import numpy as np
-from taichi.lang import ops
-from taichi.lang.exception import TaichiSyntaxError, TaichiTypeError
-from taichi.lang.expr import Expr
-from taichi.lang.matrix import Matrix
-from taichi.types.utils import is_integral
+from . import ops
+from .exception import TaichiSyntaxError, TaichiTypeError
+from .expr import Expr
+from .matrix import Matrix
+from ..types.utils import is_integral
 
 
 class _Ndrange:

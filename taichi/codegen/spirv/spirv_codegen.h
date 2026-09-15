@@ -4,6 +4,7 @@
 
 #include "taichi/codegen/spirv/snode_struct_compiler.h"
 #include "taichi/codegen/spirv/kernel_utils.h"
+#include "taichi/rhi/device_capability.h"
 
 #include <spirv-tools/libspirv.hpp>
 #include <spirv-tools/optimizer.hpp>

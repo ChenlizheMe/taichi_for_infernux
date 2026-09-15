@@ -1,14 +1,14 @@
+# Modified by Infernux in 2026: private compiler-relative imports.
 import builtins
 import functools
 import operator as _bt_ops_mod  # bt for builtin
 from typing import Union
 
 import numpy as np
-from taichi._lib import core as _ti_core
-from taichi.lang import expr, impl
-from taichi.lang.exception import TaichiSyntaxError
-from taichi.lang.field import Field
-from taichi.lang.util import cook_dtype, is_matrix_class, is_taichi_class, taichi_scope
+from .._lib import core as _ti_core
+from . import expr, impl
+from .exception import TaichiSyntaxError
+from .util import cook_dtype, is_matrix_class, is_taichi_class, taichi_scope
 
 
 def stack_info():
@@ -36,8 +36,6 @@ def _read_matrix_or_scalar(x):
 def writeback_binary(foo):
     @functools.wraps(foo)
     def wrapped(a, b):
-        if isinstance(a, Field) or isinstance(b, Field):
-            return NotImplemented
         if not (is_taichi_expr(a) and a.ptr.is_lvalue()):
             raise TaichiSyntaxError(f"cannot use a non-writable target as the first operand of '{foo.__name__}'")
         return foo(a, wrap_if_not_expr(b))
@@ -110,11 +108,9 @@ def bit_cast(obj, dtype):
 
 
 def _unary_operation(taichi_op, python_op, a):
-    if isinstance(a, Field):
-        return NotImplemented
     if is_taichi_expr(a):
         return expr.Expr(taichi_op(a.ptr), dbg_info=_ti_core.DebugInfo(stack_info()))
-    from taichi.lang.matrix import Matrix  # pylint: disable-msg=C0415
+    from .matrix import Matrix  # pylint: disable-msg=C0415
 
     if isinstance(a, Matrix):
         return Matrix(python_op(a.to_numpy()))
@@ -122,12 +118,10 @@ def _unary_operation(taichi_op, python_op, a):
 
 
 def _binary_operation(taichi_op, python_op, a, b):
-    if isinstance(a, Field) or isinstance(b, Field):
-        return NotImplemented
     if is_taichi_expr(a) or is_taichi_expr(b):
         a, b = wrap_if_not_expr(a), wrap_if_not_expr(b)
         return expr.Expr(taichi_op(a.ptr, b.ptr), dbg_info=_ti_core.DebugInfo(stack_info()))
-    from taichi.lang.matrix import Matrix  # pylint: disable-msg=C0415
+    from .matrix import Matrix  # pylint: disable-msg=C0415
 
     if isinstance(a, Matrix) or isinstance(b, Matrix):
         return Matrix(python_op(_read_matrix_or_scalar(a), _read_matrix_or_scalar(b)))
@@ -135,12 +129,10 @@ def _binary_operation(taichi_op, python_op, a, b):
 
 
 def _ternary_operation(taichi_op, python_op, a, b, c):
-    if isinstance(a, Field) or isinstance(b, Field) or isinstance(c, Field):
-        return NotImplemented
     if is_taichi_expr(a) or is_taichi_expr(b) or is_taichi_expr(c):
         a, b, c = wrap_if_not_expr(a), wrap_if_not_expr(b), wrap_if_not_expr(c)
         return expr.Expr(taichi_op(a.ptr, b.ptr, c.ptr), dbg_info=_ti_core.DebugInfo(stack_info()))
-    from taichi.lang.matrix import Matrix  # pylint: disable-msg=C0415
+    from .matrix import Matrix  # pylint: disable-msg=C0415
 
     if isinstance(a, Matrix) or isinstance(b, Matrix) or isinstance(c, Matrix):
         return Matrix(

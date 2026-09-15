@@ -1,15 +1,10 @@
-# Python, numpy, and pybind11
-execute_process(COMMAND ${PYTHON_EXECUTABLE} -m pybind11 --cmakedir
-                OUTPUT_VARIABLE pybind11_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
-execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import numpy;print(numpy.get_include())"
-                OUTPUT_VARIABLE NUMPY_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
-
-message("-- Python: Using ${PYTHON_EXECUTABLE} as the interpreter")
-message("    version: ${PYTHON_VERSION_STRING}")
-message("    include: ${PYTHON_INCLUDE_DIR}")
-message("    library: ${PYTHON_LIBRARY}")
-message("    numpy include: ${NUMPY_INCLUDE_DIR}")
-
-include_directories(${NUMPY_INCLUDE_DIR})
-
-find_package(pybind11 CONFIG REQUIRED)
+# Modified by the Infernux project in 2026: one Python interpreter/ABI
+# contract, using FindPython instead of removed legacy discovery modules.
+# The root build selects the interpreter and module ABI once, including the
+# interpreter used to generate SPIR-V tables in non-extension builds.
+set(PYBIND11_FINDPYTHON ON)
+execute_process(COMMAND "${Python_EXECUTABLE}" -m pybind11 --cmakedir
+                OUTPUT_VARIABLE pybind11_DIR OUTPUT_STRIP_TRAILING_WHITESPACE
+                COMMAND_ERROR_IS_FATAL ANY)
+find_package(pybind11 3 CONFIG REQUIRED)
+include_directories(${Python_NumPy_INCLUDE_DIRS})

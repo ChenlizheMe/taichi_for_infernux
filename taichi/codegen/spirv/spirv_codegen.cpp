@@ -791,6 +791,26 @@ class TaskCodegen : public IRVisitor {
                                             linear_offset));
       ir_->register_value(stmt->raw_name(), addr);
     } else {
+      // Infernux modification: external buffers are engine-owned descriptor
+      // resources. The data-pointer word is therefore a byte offset into the
+      // bound RHI buffer, which permits unaligned logical inx.buffer views
+      // without rebinding or allocating another Vulkan resource.
+      std::vector<int> indices = arg_id;
+      indices.push_back(TypeFactory::DATA_PTR_POS_IN_NDARRAY);
+      const spirv::Value arguments =
+          get_buffer_value(BufferType::Args, PrimitiveType::i32);
+      spirv::SType offset_type = args_struct_types_.at(indices);
+      // Logical-pointer arguments are represented by an unsigned 32-bit byte
+      // offset in this SPIR-V ABI, even though the source Taichi type remains
+      // PointerType for frontend type checking.
+      offset_type.dt = PrimitiveType::u32;
+      spirv::Value offset_ptr = ir_->make_access_chain(
+          ir_->get_pointer_type(offset_type, spv::StorageClassUniform),
+          arguments, indices);
+      spirv::Value base_offset =
+          ir_->load_variable(offset_ptr, offset_type);
+      linear_offset =
+          ir_->add(ir_->cast(ir_->i32_type(), base_offset), linear_offset);
       ir_->register_value(stmt->raw_name(), linear_offset);
     }
 
@@ -1278,7 +1298,11 @@ class TaskCodegen : public IRVisitor {
       rhs_value = ir_->cast(dst_type, rhs_value);
       bin_value = ir_->div(lhs_value, rhs_value);
     }
-    else {TI_NOT_IMPLEMENTED} ir_->register_value(bin_name, bin_value);
+    else {
+      TI_ERROR("Unsupported SPIR-V binary operation '{}' for type '{}'\n{}",
+               binary_op_type_name(op_type), bin->element_type()->to_string(), bin->get_tb());
+    }
+    ir_->register_value(bin_name, bin_value);
   }
 
   void visit(TernaryOpStmt *tri) override {

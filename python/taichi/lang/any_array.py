@@ -1,9 +1,10 @@
-from taichi._lib import core as _ti_core
-from taichi.lang import impl
-from taichi.lang.enums import Layout
-from taichi.lang.expr import Expr, make_expr_group
-from taichi.lang.util import taichi_scope
-from taichi.types.ndarray_type import NdarrayTypeMetadata
+# Modified by Infernux in 2026: private compiler-relative imports.
+from .._lib import core as _ti_core
+from . import impl
+from .enums import Layout
+from .expr import Expr, make_expr_group
+from .util import taichi_scope
+from ..types.buffer_type import BufferTypeMetadata
 
 
 class AnyArray:
@@ -32,7 +33,7 @@ class AnyArray:
         return Layout.AOS
 
     def get_type(self):
-        return NdarrayTypeMetadata(
+        return BufferTypeMetadata(
             _ti_core.get_external_tensor_element_type(self.ptr), None, _ti_core.get_external_tensor_needs_grad(self.ptr)
         )  # AnyArray can take any shape
 

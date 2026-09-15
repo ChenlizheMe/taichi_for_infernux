@@ -1,8 +1,9 @@
 #pragma once
+
+// Modified for Infernux: host-owned execution and unified root-buffer metadata.
 #include "taichi/util/lang_util.h"
 
 #include <vector>
-#include <chrono>
 
 #include "taichi/rhi/device.h"
 #include "taichi/codegen/spirv/snode_struct_compiler.h"
@@ -23,7 +24,6 @@ using BufferInfo = TaskAttributes::BufferInfo;
 using BufferBind = TaskAttributes::BufferBind;
 using BufferInfoHasher = TaskAttributes::BufferInfoHasher;
 
-using high_res_clock = std::chrono::high_resolution_clock;
 
 // TODO: In the future this isn't necessarily a pointer, since DeviceAllocation
 // is already a pretty cheap handle>
@@ -44,7 +44,6 @@ class CompiledTaichiKernel {
     DeviceAllocation *global_tmps_buffer{nullptr};
     DeviceAllocation *listgen_buffer{nullptr};
 
-    PipelineCache *backend_cache{nullptr};
   };
 
   explicit CompiledTaichiKernel(const Params &ti_params);
@@ -110,6 +109,8 @@ class TI_DLL_EXPORT GfxRuntime {
 
   void synchronize();
 
+  // Called at the engine provider's submission boundary. No wall-clock based
+  // auto-submit; an empty flush returns the last completion token unchanged.
   StreamSemaphore flush();
 
   Device *get_ti_device() const;
@@ -140,16 +141,18 @@ class TI_DLL_EXPORT GfxRuntime {
   friend class taichi::lang::gfx::SNodeTreeManager;
 
   void ensure_current_cmdlist();
-  void submit_current_cmdlist_if_timeout();
 
   void init_nonroot_buffers();
 
   Device *device_{nullptr};
   KernelProfilerBase *profiler_;
 
-  std::unique_ptr<PipelineCache> backend_cache_{nullptr};
 
-  std::vector<std::unique_ptr<DeviceAllocationGuard>> root_buffers_;
+  struct RootBuffer {
+    DeviceAllocationUnique allocation;
+    size_t byte_size;
+  };
+  std::vector<RootBuffer> root_buffers_;
   std::unique_ptr<DeviceAllocationGuard> global_tmps_buffer_;
   // FIXME: Support proper multiple lists
   std::unique_ptr<DeviceAllocationGuard> listgen_buffer_;
@@ -157,11 +160,10 @@ class TI_DLL_EXPORT GfxRuntime {
   std::vector<std::unique_ptr<DeviceAllocationGuard>> ctx_buffers_;
 
   std::unique_ptr<CommandList> current_cmdlist_{nullptr};
-  high_res_clock::time_point current_cmdlist_pending_since_;
+  StreamSemaphore last_submission_;
 
   std::vector<std::unique_ptr<CompiledTaichiKernel>> ti_kernels_;
 
-  std::unordered_map<DeviceAllocation *, size_t> root_buffers_size_map_;
   std::unordered_map<DeviceAllocationId, ImageLayout> last_image_layouts_;
   // [Note] Why do we need to track ndarrays that are in use?
   // Since we separate cmdlist is async, taichi needs a way to know whether

@@ -1,6 +1,7 @@
-from taichi._lib.utils import ti_python_core as _ti_python_core
+# Modified by Infernux in 2026: private compiler-relative imports.
+from .._lib.utils import ti_python_core as _ti_python_core
 
-import taichi
+from Infernux._compiler.taichi._vendor import taichi
 
 _type_factory = _ti_python_core.get_type_factory_instance()
 
@@ -66,23 +67,4 @@ def struct(**kwargs):
     return taichi.lang.struct.StructType(**kwargs)
 
 
-def argpack(**kwargs):
-    """Creates an argument pack type with given members.
-
-    Args:
-        kwargs (dict): a dictionary contains the names and types of the
-            argument pack members.
-
-    Returns:
-        A argument pack type.
-
-    Example::
-
-        >>> vec3 = ti.types.vector(3, ti.f32)
-        >>> sphere = ti.types.argpack(center=vec3, radius=float)
-        >>> s = sphere(center=vec3([0., 0., 0.]), radius=1.0)
-    """
-    return taichi.lang.argpack.ArgPackType(**kwargs)
-
-
-__all__ = ["matrix", "vector", "struct", "argpack"]
+__all__ = ["matrix", "vector", "struct"]

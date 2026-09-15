@@ -12,19 +12,31 @@ CPU 计算继续使用引擎的 Numba/llvmlite 路径；引擎和适用的 Playe
 
 ## 当前进度
 
-裁剪和集成仍在进行中。仓库先明确新的定位、JIT 构建约束和原生模块输出位置，**还不是可以直接使用的完整制品**。源码仍有待拆除的上游运行时和 AOT 实现，关闭选项不等于已经删干净；本地引擎实验也尚未全部发布。
+裁剪和发行集成仍在进行中。引擎构建已经能将私有 Python 前端和原生 SPIR-V 编译模块直接安装到 wheel 目录；Windows 集成测试覆盖无 GPU 设备的内核编译，以及通过 Infernux Vulkan 后端执行编译结果。
 
-新的作者接口计划使用 `inx.buffer`、`set_data/get_data`、小写 `inx.vector3`，并将 CPU `@inx.jit.compile` 与 GPU `@inx.compute.kernel`、`inx.compute.launch` 分开。这些是迁移目标，不是当前版本的运行示例。
+当前使用的 Python 前端已移除 field/SNode 存储管理、设备数组构造和内核执行运行时。导入限定在 `Infernux._compiler.taichi` 内部，不占用公共 `taichi` 包名；矩阵、向量数值表达式和代码生成所需的 IR 继续保留。原生 IR 依赖和不再使用的上游运行时、AOT 源码仍需继续裁剪，关闭构建选项不等于删除完成。完整的多平台 wheel 与 Player 发行矩阵尚未验收。
+
+编译直接读取引擎提供的 buffer 类型描述，不再分配 NumPy 占位数组。每个入口只创建一个正向内核，自动梯度内核和类方法探测已移除。引擎的 `infernux.compute_compiler_only` 正式测试会从安装后的编译器生成 SPIR-V，不加载引擎，也不创建 GPU 设备；实际执行另由 Vulkan 集成测试覆盖。
+
+辅助函数统一内联到 kernel，不再维护另一套独立函数的编译、调用和缓存接口。优化器所需的共享 IR 仍保留在编译器内部。
+
+编译内核自行持有原生 IR，并在需要时保持编译上下文存活。Python 和 Program 不再长期登记每个编译过的内核；引擎保留的是导出的 SPIR-V 制品，不是已用完的编译对象或临时生成源码。
+
+原生上下文直接调用 SPIR-V 编译器，不再经过可切换后端接口，也不再限制整个进程只能有一个上下文。输出只包含代码与元数据；旧 TIC 文件序列化、内容哈希和执行句柄已移除，制品缓存继续由引擎负责。这不代表共享 Python 前端和类型工厂已经支持并发编译。
+
+编译所需的纹理格式、设备能力描述已与设备操作接口分开。旧的显存分配、上传回读和命令提交实现及其构建目标已删除，这些操作只由 Infernux 执行。
+
+引擎侧已经接入 `inx.buffer`、`set_data/get_data`、小写 `inx.vector3`，并将 CPU `@inx.jit.compile` 与 GPU `@inx.compute.kernel`、`inx.compute.launch` 分开。这些是 Infernux 的接口，不是本仓库提供的独立 Taichi 作者 API。
 
 ## 构建与分发
 
 引擎开发使用 `infernux` conda 环境。源码依赖位于 `external/taichi_for_infernux`，不再放入 `external/plugins`。
 
-`infernux-jit` CMake preset 禁用 AOT C-API 和不需要的后端。原生绑定直接输出到 `build/infernux-jit/wheel/Infernux/_compiler/taichi`，也可以用 `INFERNUX_COMPILER_OUTPUT_DIR` 指定引擎自己的 wheel staging 目录。
+`infernux-jit` CMake preset 禁用 AOT C-API 和不需要的后端。原生绑定直接输出到 `build/infernux-jit/wheel/Infernux/_compiler/taichi/_vendor/taichi/_lib/core`，也可以用 `INFERNUX_COMPILER_OUTPUT_DIR` 指定引擎自己的原生编译模块输出目录。
 
-`infernux_compiler` 安装组件负责原生模块和许可文件。前端依赖收集、完整 wheel 与 Player 的双 JIT 打包仍需接通。不再以 `.inxpkg` 或独立 Taichi wheel 为交付目标，上游遗留发布脚本也不是 Infernux 的发布入口。
+`infernux_compiler` 安装组件负责原生绑定、私有 Python 前端以及 LICENSE/NOTICE。引擎的 `infernux_gpu_jit_compiler` 目标完成构建和安装，不需要手动搬运。跨平台依赖收集及 Player 的双 JIT 打包仍需完成。不再以 `.inxpkg` 或独立 Taichi wheel 为交付目标，上游遗留发布脚本也不是 Infernux 的发布入口。
 
-当前 CI 在 Windows/Linux 检查构建配置和输出合同；实际编译、运行与性能验收仍需完成，不能用配置检查通过代替。
+当前 CI 在 Windows/Linux 检查构建配置，并实际构建一个小型原生测试库，将私有前端和 LICENSE/NOTICE 安装到预期目录。这验证的是 wheel 目录与载荷交付，不代替完整编译器构建、运行正确性或性能验收。
 
 ## 来源与许可
 

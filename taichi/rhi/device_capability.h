@@ -1,13 +1,12 @@
 #pragma once
 #include <string>
+#include <string_view>
 #include <map>
 #include <cstdint>
 
 namespace taichi::lang {
 
-// For backend dependent code (e.g. codegen)
-// Or the backend runtime itself
-// Capabilities are per-device
+// Compiler input supplied by the engine; does not discover or create a device.
 enum class DeviceCapability : uint32_t {
 #define PER_DEVICE_CAPABILITY(name) name,
 #include "taichi/inc/rhi_constants.inc.h"

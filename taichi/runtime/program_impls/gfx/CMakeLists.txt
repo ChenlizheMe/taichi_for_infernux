@@ -12,7 +12,6 @@ target_include_directories(gfx_program_impl
         ${PROJECT_SOURCE_DIR}/external/eigen
         ${PROJECT_SOURCE_DIR}/external/spdlog/include
         ${PROJECT_SOURCE_DIR}/external/SPIRV-Tools/include
-        ${LLVM_INCLUDE_DIRS}
         )
 
 target_link_libraries(gfx_program_impl PRIVATE gfx_runtime)

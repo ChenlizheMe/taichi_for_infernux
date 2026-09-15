@@ -1,3 +1,4 @@
+# Modified by Infernux in 2026: private compiler-relative imports.
 import ast
 import collections.abc
 import itertools
@@ -6,32 +7,35 @@ import re
 import warnings
 from collections import ChainMap
 from sys import version_info
-import inspect
-import math
 
 import numpy as np
-from taichi._lib import core as _ti_core
-from taichi.lang import _ndarray, any_array, expr, impl, kernel_arguments, matrix, mesh
-from taichi.lang import ops as ti_ops
-from taichi.lang._ndrange import _Ndrange, ndrange
-from taichi.lang.argpack import ArgPackType
-from taichi.lang.ast.ast_transformer_utils import Builder, LoopStatus, ReturnStatus
-from taichi.lang.ast.symbol_resolver import ASTResolver
-from taichi.lang.exception import (
+from ..._lib import core as _ti_core
+from .. import any_array, expr, impl, kernel_arguments, matrix
+from .. import ops as ti_ops
+from .._ndrange import _Ndrange, ndrange
+from .ast_transformer_utils import Builder, LoopStatus, ReturnStatus
+from .symbol_resolver import ASTResolver
+from ..exception import (
     TaichiIndexError,
     TaichiSyntaxError,
     TaichiTypeError,
     handle_exception_from_cpp,
 )
-from taichi.lang.expr import Expr, make_expr_group
-from taichi.lang.exception import TaichiRuntimeTypeError
-from taichi.lang.field import Field
-from taichi.lang.matrix import Matrix, MatrixType, Vector
-from taichi.lang.snode import append, deactivate, length
-from taichi.lang.struct import Struct, StructType
-from taichi.lang.util import is_taichi_class, to_taichi_type
-from taichi.types import annotations, ndarray_type, primitive_types, texture_type
-from taichi.types.utils import is_integral
+from ..expr import Expr, make_expr_group
+from ..exception import TaichiRuntimeTypeError
+from ..matrix import Matrix, MatrixType, Vector
+from ..struct import Struct, StructType
+from ..util import is_taichi_class, to_taichi_type
+from ...types import annotations, buffer_type, primitive_types
+from ...types.utils import is_integral
+
+
+class _UnsupportedMeshModule:
+    def __getattr__(self, name):
+        raise TaichiSyntaxError("Infernux GPU kernels use inx.buffer; Taichi mesh fields are not supported")
+
+
+mesh = _UnsupportedMeshModule()
 
 if version_info < (3, 9):
     from astunparse import unparse
@@ -416,7 +420,7 @@ class ASTTransformer(Builder):
 
     @staticmethod
     def build_call_if_is_builtin(ctx, node, args, keywords):
-        from taichi.lang import matrix_ops  # pylint: disable=C0415
+        from .. import matrix_ops  # pylint: disable=C0415
 
         func = node.func.ptr
         replace_func = {
@@ -468,7 +472,9 @@ class ASTTransformer(Builder):
             return False
         if hasattr(func, "_is_taichi_function") or hasattr(func, "_is_wrapped_kernel"):  # taichi func/kernel
             return False
-        if hasattr(func, "__module__") and func.__module__ and func.__module__.startswith("taichi."):
+        if hasattr(func, "__module__") and func.__module__ and func.__module__.startswith(
+            __package__.removesuffix(".lang.ast") + "."
+        ):
             return False
         return True
 
@@ -597,20 +603,9 @@ class ASTTransformer(Builder):
         try:
             node.ptr = func(*args, **keywords)
         except TypeError as e:
-            module = inspect.getmodule(func)
             error_msg = re.sub(r"\bExpr\b", "Taichi Expression", str(e))
             msg = f"TypeError when calling `{func.__name__}`: {error_msg}."
-            if ASTTransformer.is_external_func(ctx, node.func.ptr):
-                args_has_expr = any([isinstance(arg, Expr) for arg in args])
-                if args_has_expr and (module == math or module == np):
-                    exec_str = f"from taichi import {func.__name__}"
-                    try:
-                        exec(exec_str, {})
-                    except:
-                        pass
-                    else:
-                        msg += f"\nDid you mean to use `ti.{func.__name__}` instead of `{module.__name__}.{func.__name__}`?"
-            raise TaichiTypeError(msg)
+            raise TaichiTypeError(msg) from e
 
         if getattr(func, "_is_taichi_function", False):
             ctx.func.has_print |= func.func.has_print
@@ -635,34 +630,9 @@ class ASTTransformer(Builder):
             full_name = prefix_name + "_" + name
             if not isinstance(annotation, primitive_types.RefType):
                 ctx.kernel_args.append(name)
-            if isinstance(annotation, ArgPackType):
-                kernel_arguments.push_argpack_arg(name)
-                d = {}
-                items_to_put_in_dict = []
-                for j, (_name, anno) in enumerate(annotation.members.items()):
-                    result, obj = decl_and_create_variable(
-                        anno, _name, arg_features[j], invoke_later_dict, full_name, arg_depth + 1
-                    )
-                    if not result:
-                        d[_name] = None
-                        items_to_put_in_dict.append((full_name + "_" + _name, _name, obj))
-                    else:
-                        d[_name] = obj
-                argpack = kernel_arguments.decl_argpack_arg(annotation, d)
-                for item in items_to_put_in_dict:
-                    invoke_later_dict[item[0]] = argpack, item[1], *item[2]
-                return True, argpack
             if isinstance(annotation, annotations.template):
                 return True, ctx.global_vars[name]
-            if isinstance(annotation, annotations.sparse_matrix_builder):
-                return False, (
-                    kernel_arguments.decl_sparse_matrix,
-                    (
-                        to_taichi_type(arg_features),
-                        full_name,
-                    ),
-                )
-            if isinstance(annotation, ndarray_type.NdarrayType):
+            if isinstance(annotation, buffer_type.BufferType):
                 return False, (
                     kernel_arguments.decl_ndarray_arg,
                     (
@@ -672,13 +642,6 @@ class ASTTransformer(Builder):
                         arg_features[2],
                         arg_features[3],
                     ),
-                )
-            if isinstance(annotation, texture_type.TextureType):
-                return False, (kernel_arguments.decl_texture_arg, (arg_features[0], full_name))
-            if isinstance(annotation, texture_type.RWTextureType):
-                return False, (
-                    kernel_arguments.decl_rw_texture_arg,
-                    (arg_features[0], arg_features[1], arg_features[2], full_name),
                 )
             if isinstance(annotation, MatrixType):
                 return True, kernel_arguments.decl_matrix_arg(annotation, name, arg_depth)
@@ -693,41 +656,16 @@ class ASTTransformer(Builder):
                     kernel_arguments.decl_ret(return_type)
             impl.get_runtime().compiling_callable.finalize_rets()
 
-            invoke_later_dict = dict()
-            create_variable_later = dict()
             for i, arg in enumerate(args.args):
-                if isinstance(ctx.func.arguments[i].annotation, ArgPackType):
-                    kernel_arguments.push_argpack_arg(ctx.func.arguments[i].name)
-                    d = {}
-                    items_to_put_in_dict = []
-                    for j, (name, anno) in enumerate(ctx.func.arguments[i].annotation.members.items()):
-                        result, obj = decl_and_create_variable(
-                            anno, name, ctx.arg_features[i][j], invoke_later_dict, "__argpack_" + name, 1
-                        )
-                        if not result:
-                            d[name] = None
-                            items_to_put_in_dict.append(("__argpack_" + name, name, obj))
-                        else:
-                            d[name] = obj
-                    argpack = kernel_arguments.decl_argpack_arg(ctx.func.arguments[i].annotation, d)
-                    for item in items_to_put_in_dict:
-                        invoke_later_dict[item[0]] = argpack, item[1], *item[2]
-                    create_variable_later[arg.arg] = argpack
-                else:
-                    result, obj = decl_and_create_variable(
-                        ctx.func.arguments[i].annotation,
-                        ctx.func.arguments[i].name,
-                        ctx.arg_features[i] if ctx.arg_features is not None else None,
-                        invoke_later_dict,
-                        "",
-                        0,
-                    )
-                    ctx.create_variable(arg.arg, obj if result else obj[0](*obj[1]))
-            for k, v in invoke_later_dict.items():
-                argpack, name, func, params = v
-                argpack[name] = func(*params)
-            for k, v in create_variable_later.items():
-                ctx.create_variable(k, v)
+                result, obj = decl_and_create_variable(
+                    ctx.func.arguments[i].annotation,
+                    ctx.func.arguments[i].name,
+                    ctx.arg_features[i] if ctx.arg_features is not None else None,
+                    {},
+                    "",
+                    0,
+                )
+                ctx.create_variable(arg.arg, obj if result else obj[0](*obj[1]))
 
             impl.get_runtime().compiling_callable.finalize_params()
             # remove original args
@@ -737,79 +675,68 @@ class ASTTransformer(Builder):
             transform_as_kernel()
 
         else:  # ti.func
-            if ctx.is_real_function:
-                transform_as_kernel()
-            else:
-                assert len(args.args) == len(ctx.argument_data)
-                for i, (arg, data) in enumerate(zip(args.args, ctx.argument_data)):
-                    # Template arguments are passed by reference.
-                    if isinstance(ctx.func.arguments[i].annotation, annotations.template):
-                        ctx.create_variable(ctx.func.arguments[i].name, data)
-                        continue
+            assert len(args.args) == len(ctx.argument_data)
+            for i, (arg, data) in enumerate(zip(args.args, ctx.argument_data)):
+                # Template arguments are passed by reference.
+                if isinstance(ctx.func.arguments[i].annotation, annotations.template):
+                    ctx.create_variable(ctx.func.arguments[i].name, data)
+                    continue
 
-                    # Ndarray arguments are passed by reference.
-                    if isinstance(ctx.func.arguments[i].annotation, (ndarray_type.NdarrayType)):
-                        if not isinstance(
-                            data,
-                            (
-                                _ndarray.ScalarNdarray,
-                                matrix.VectorNdarray,
-                                matrix.MatrixNdarray,
-                                any_array.AnyArray,
-                            ),
-                        ):
-                            raise TaichiSyntaxError(
-                                f"Argument {arg.arg} of type {ctx.func.arguments[i].annotation} is not recognized."
-                            )
-                        ctx.func.arguments[i].annotation.check_matched(data.get_type(), ctx.func.arguments[i].name)
-                        ctx.create_variable(ctx.func.arguments[i].name, data)
-                        continue
-
-                    # Matrix arguments are passed by value.
-                    if isinstance(ctx.func.arguments[i].annotation, (MatrixType)):
-                        # "data" is expected to be an Expr here,
-                        # so we simply call "impl.expr_init_func(data)" to perform:
-                        #
-                        # TensorType* t = alloca()
-                        # assign(t, data)
-                        #
-                        # We created local variable "t" - a copy of the passed-in argument "data"
-                        if not isinstance(data, expr.Expr) or not data.ptr.is_tensor():
-                            raise TaichiSyntaxError(
-                                f"Argument {arg.arg} of type {ctx.func.arguments[i].annotation} is expected to be a Matrix, but got {type(data)}."
-                            )
-
-                        element_shape = data.ptr.get_rvalue_type().shape()
-                        if len(element_shape) != ctx.func.arguments[i].annotation.ndim:
-                            raise TaichiSyntaxError(
-                                f"Argument {arg.arg} of type {ctx.func.arguments[i].annotation} is expected to be a Matrix with ndim {ctx.func.arguments[i].annotation.ndim}, but got {len(element_shape)}."
-                            )
-
-                        assert ctx.func.arguments[i].annotation.ndim > 0
-                        if element_shape[0] != ctx.func.arguments[i].annotation.n:
-                            raise TaichiSyntaxError(
-                                f"Argument {arg.arg} of type {ctx.func.arguments[i].annotation} is expected to be a Matrix with n {ctx.func.arguments[i].annotation.n}, but got {element_shape[0]}."
-                            )
-
-                        if (
-                            ctx.func.arguments[i].annotation.ndim == 2
-                            and element_shape[1] != ctx.func.arguments[i].annotation.m
-                        ):
-                            raise TaichiSyntaxError(
-                                f"Argument {arg.arg} of type {ctx.func.arguments[i].annotation} is expected to be a Matrix with m {ctx.func.arguments[i].annotation.m}, but got {element_shape[0]}."
-                            )
-
-                        ctx.create_variable(arg.arg, impl.expr_init_func(data))
-                        continue
-
-                    if id(ctx.func.arguments[i].annotation) in primitive_types.type_ids:
-                        ctx.create_variable(
-                            arg.arg, impl.expr_init_func(ti_ops.cast(data, ctx.func.arguments[i].annotation))
+                # Infernux buffer arguments are passed by reference.
+                if isinstance(ctx.func.arguments[i].annotation, buffer_type.BufferType):
+                    if not isinstance(data, any_array.AnyArray):
+                        raise TaichiSyntaxError(
+                            f"Argument {arg.arg} of type {ctx.func.arguments[i].annotation} is not recognized."
                         )
-                        continue
-                    # Create a copy for non-template arguments,
-                    # so that they are passed by value.
-                    ctx.create_variable(arg.arg, impl.expr_init_func(data))
+                    ctx.func.arguments[i].annotation.check_matched(data.get_type(), ctx.func.arguments[i].name)
+                    ctx.create_variable(ctx.func.arguments[i].name, data)
+                    continue
+
+                # Matrix arguments are passed by value.
+                if isinstance(ctx.func.arguments[i].annotation, (MatrixType)):
+                    # "data" is expected to be an Expr here,
+                    # so we simply call "impl.expr_init(data)" to perform:
+                    #
+                    # TensorType* t = alloca()
+                    # assign(t, data)
+                    #
+                    # We created local variable "t" - a copy of the passed-in argument "data"
+                    if not isinstance(data, expr.Expr) or not data.ptr.is_tensor():
+                        raise TaichiSyntaxError(
+                            f"Argument {arg.arg} of type {ctx.func.arguments[i].annotation} is expected to be a Matrix, but got {type(data)}."
+                        )
+
+                    element_shape = data.ptr.get_rvalue_type().shape()
+                    if len(element_shape) != ctx.func.arguments[i].annotation.ndim:
+                        raise TaichiSyntaxError(
+                            f"Argument {arg.arg} of type {ctx.func.arguments[i].annotation} is expected to be a Matrix with ndim {ctx.func.arguments[i].annotation.ndim}, but got {len(element_shape)}."
+                        )
+
+                    assert ctx.func.arguments[i].annotation.ndim > 0
+                    if element_shape[0] != ctx.func.arguments[i].annotation.n:
+                        raise TaichiSyntaxError(
+                            f"Argument {arg.arg} of type {ctx.func.arguments[i].annotation} is expected to be a Matrix with n {ctx.func.arguments[i].annotation.n}, but got {element_shape[0]}."
+                        )
+
+                    if (
+                        ctx.func.arguments[i].annotation.ndim == 2
+                        and element_shape[1] != ctx.func.arguments[i].annotation.m
+                    ):
+                        raise TaichiSyntaxError(
+                            f"Argument {arg.arg} of type {ctx.func.arguments[i].annotation} is expected to be a Matrix with m {ctx.func.arguments[i].annotation.m}, but got {element_shape[0]}."
+                        )
+
+                    ctx.create_variable(arg.arg, impl.expr_init(data))
+                    continue
+
+                if id(ctx.func.arguments[i].annotation) in primitive_types.type_ids:
+                    ctx.create_variable(
+                        arg.arg, impl.expr_init(ti_ops.cast(data, ctx.func.arguments[i].annotation))
+                    )
+                    continue
+                # Create a copy for non-template arguments,
+                # so that they are passed by value.
+                ctx.create_variable(arg.arg, impl.expr_init(data))
 
         with ctx.variable_scope_guard():
             build_stmts(ctx, node.body)
@@ -818,16 +745,14 @@ class ASTTransformer(Builder):
 
     @staticmethod
     def build_Return(ctx, node):
-        if not ctx.is_real_function:
-            if ctx.is_in_non_static_control_flow():
-                raise TaichiSyntaxError("Return inside non-static if/for is not supported")
+        if ctx.is_in_non_static_control_flow():
+            raise TaichiSyntaxError("Return inside non-static if/for is not supported")
         if node.value is not None:
             build_stmt(ctx, node.value)
         if node.value is None or node.value.ptr is None:
-            if not ctx.is_real_function:
-                ctx.returned = ReturnStatus.ReturnedVoid
+            ctx.returned = ReturnStatus.ReturnedVoid
             return None
-        if ctx.is_kernel or ctx.is_real_function:
+        if ctx.is_kernel:
             # TODO: check if it's at the end of a kernel, throw TaichiSyntaxError if not
             if ctx.func.return_type is None:
                 raise TaichiSyntaxError(
@@ -923,13 +848,14 @@ class ASTTransformer(Builder):
             if ctx.func.return_type is not None:
                 if len(ctx.func.return_type) == 1:
                     ctx.return_data = [ctx.return_data]
+                else:
+                    ctx.return_data = list(ctx.return_data)
                 for i, return_type in enumerate(ctx.func.return_type):
                     if id(return_type) in primitive_types.type_ids:
                         ctx.return_data[i] = ti_ops.cast(ctx.return_data[i], return_type)
                 if len(ctx.func.return_type) == 1:
                     ctx.return_data = ctx.return_data[0]
-        if not ctx.is_real_function:
-            ctx.returned = ReturnStatus.ReturnedValue
+        ctx.returned = ReturnStatus.ReturnedValue
         return None
 
     @staticmethod
@@ -942,68 +868,8 @@ class ASTTransformer(Builder):
         return None
 
     @staticmethod
-    def build_attribute_if_is_dynamic_snode_method(ctx, node):
-        is_subscript = isinstance(node.value, ast.Subscript)
-        names = ("append", "deactivate", "length")
-        if node.attr not in names:
-            return False
-        if is_subscript:
-            x = node.value.value.ptr
-            indices = node.value.slice.ptr
-        else:
-            x = node.value.ptr
-            indices = []
-        if not isinstance(x, Field):
-            return False
-        if not x.parent().ptr.type == _ti_core.SNodeType.dynamic:
-            return False
-        field_dim = x.snode.ptr.num_active_indices()
-        indices_expr_group = make_expr_group(*indices)
-        index_dim = indices_expr_group.size()
-        if field_dim != index_dim + 1:
-            return False
-        if node.attr == "append":
-            node.ptr = lambda val: append(x.parent(), indices, val)
-        elif node.attr == "deactivate":
-            node.ptr = lambda: deactivate(x.parent(), indices)
-        else:
-            node.ptr = lambda: length(x.parent(), indices)
-        return True
-
-    @staticmethod
     def build_Attribute(ctx, node):
-        # There are two valid cases for the methods of Dynamic SNode:
-        #
-        # 1. x[i, j].append (where the dimension of the field (3 in this case) is equal to one plus the number of the
-        # indices (2 in this case) )
-        #
-        # 2. x.append (where the dimension of the field is one, equal to x[()].append)
-        #
-        # For the first case, the AST (simplified) is like node = Attribute(value=Subscript(value=x, slice=[i, j]),
-        # attr="append"), when we build_stmt(node.value)(build the expression of the Subscript i.e. x[i, j]),
-        # it should build the expression of node.value.value (i.e. x) and node.value.slice (i.e. [i, j]), and raise a
-        # TaichiIndexError because the dimension of the field is not equal to the number of the indices. Therefore,
-        # when we meet the error, we can detect whether it is a method of Dynamic SNode and build the expression if
-        # it is by calling build_attribute_if_is_dynamic_snode_method. If we find that it is not a method of Dynamic
-        # SNode, we raise the error again.
-        #
-        # For the second case, the AST (simplified) is like node = Attribute(value=x, attr="append"), and it does not
-        # raise error when we build_stmt(node.value). Therefore, when we do not meet the error, we can also detect
-        # whether it is a method of Dynamic SNode and build the expression if it is by calling
-        # build_attribute_if_is_dynamic_snode_method. If we find that it is not a method of Dynamic SNode,
-        # we continue to process it as a normal attribute node.
-        try:
-            build_stmt(ctx, node.value)
-        except Exception as e:
-            e = handle_exception_from_cpp(e)
-            if isinstance(e, TaichiIndexError):
-                node.value.ptr = None
-                if ASTTransformer.build_attribute_if_is_dynamic_snode_method(ctx, node):
-                    return node.ptr
-            raise e
-
-        if ASTTransformer.build_attribute_if_is_dynamic_snode_method(ctx, node):
-            return node.ptr
+        build_stmt(ctx, node.value)
 
         if isinstance(node.value.ptr, Expr) and not hasattr(node.value.ptr, node.attr):
             if node.attr in Matrix._swizzle_to_keygroup:
@@ -1030,7 +896,7 @@ class ASTTransformer(Builder):
                         )
                     )
             else:
-                from taichi.lang import (  # pylint: disable=C0415
+                from .. import (  # pylint: disable=C0415
                     matrix_ops as tensor_ops,
                 )
 
@@ -1045,7 +911,7 @@ class ASTTransformer(Builder):
         build_stmt(ctx, node.left)
         build_stmt(ctx, node.right)
         # pylint: disable-msg=C0415
-        from taichi.lang.matrix_ops import matmul
+        from ..matrix_ops import matmul
 
         op = {
             ast.Add: lambda l, r: l + r,

@@ -1,20 +1,18 @@
-from taichi._funcs import *
-from taichi._lib import core as _ti_core
-from taichi._lib.utils import warn_restricted_version
-from taichi._logging import *
-from taichi._snode import *
-from taichi.lang import *  # pylint: disable=W0622 # TODO(archibate): It's `taichi.lang.core` overriding `taichi.core`
-from taichi.types.annotations import *
+# Modified by the Infernux project in 2026 for the private compiler frontend.
+#
+# This package is an implementation detail of ``Infernux.compute``.  Import the
+# exact compiler surface instead of publishing Taichi's author/runtime API via
+# ``taichi.lang import *``.  The remaining lang modules are being separated
+# from field/SNode/ndarray ownership incrementally; they must not become a
+# second public compute API in the meantime.
+from ._lib import core as _ti_core
+from . import lang
+from .lang import impl
+from .lang.kernel_impl import kernel
+from . import types
+from .types.primitive_types import f32, i32, u32
 
-# Provide a shortcut to types since they're commonly used.
-from taichi.types.primitive_types import *
-
-
-from taichi import ad, algorithms, experimental, graph, linalg, math, sparse, tools, types
-from taichi.ui import GUI, hex_to_rgb, rgb_to_hex, ui
-
-# Issue#2223: Do not reorder, or we're busted with partially initialized module
-from taichi import aot  # isort:skip
+vulkan = _ti_core.vulkan
 
 
 def __getattr__(attr):
@@ -29,7 +27,4 @@ __version__ = (
     _ti_core.get_version_patch(),
 )
 
-del _ti_core
-
-warn_restricted_version()
-del warn_restricted_version
+__all__ = ["f32", "i32", "kernel", "lang", "types", "u32", "vulkan"]

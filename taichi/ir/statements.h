@@ -4,7 +4,7 @@
 #include "taichi/ir/offloaded_task_type.h"
 #include "taichi/ir/stmt_op_types.h"
 #include "taichi/rhi/arch.h"
-#include "taichi/rhi/device.h"
+#include "taichi/ir/texture_format.h"
 #include "taichi/ir/mesh.h"
 
 #include <optional>

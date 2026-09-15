@@ -1,6 +1,5 @@
 #include "taichi/runtime/gfx/aot_module_loader_impl.h"
 
-#include <fstream>
 #include <type_traits>
 
 #include "taichi/runtime/gfx/runtime.h"
@@ -23,13 +22,14 @@ class FieldImpl : public aot::Field {
 class AotModuleImpl : public aot::Module {
  public:
   explicit AotModuleImpl(const AotModuleParams &params, Arch device_api_backend)
-      : module_path_(params.module_path),
-        runtime_(params.runtime),
+      : runtime_(params.runtime),
         device_api_backend_(device_api_backend) {
-    std::unique_ptr<io::VirtualDir> dir_alt =
-        io::VirtualDir::from_fs_dir(module_path_);
-    const io::VirtualDir *dir =
-        params.dir == nullptr ? dir_alt.get() : params.dir;
+    std::unique_ptr<io::VirtualDir> filesystem_dir;
+    const io::VirtualDir *dir = params.dir;
+    if (dir == nullptr) {
+      filesystem_dir = io::VirtualDir::from_fs_dir(params.module_path);
+      dir = filesystem_dir.get();
+    }
 
     {
       std::vector<uint8_t> metadata_json{};
@@ -100,6 +100,9 @@ class AotModuleImpl : public aot::Module {
                             get_kernel(dispatch.kernel_name)});
     }
     aot::CompiledGraph graph{dispatches};
+    for (const auto &dispatch : dispatches)
+      for (const auto &arg : dispatch.symbolic_args)
+        graph.args.emplace(arg.name, arg);
     return std::make_unique<aot::CompiledGraph>(std::move(graph));
   }
 
@@ -133,10 +136,9 @@ class AotModuleImpl : public aot::Module {
       if (ti_aot_data_.kernels[i].name == name) {
         kernel.kernel_attribs = ti_aot_data_.kernels[i];
         kernel.task_spirv_source_codes = ti_aot_data_.spirv_codes[i];
-        // We don't have to store the number of SNodeTree in |ti_aot_data_| yet,
-        // because right now we only support a single SNodeTree during AOT.
-        // TODO: Support multiple SNodeTrees in AOT.
-        kernel.num_snode_trees = 1;
+        // The current AOT format supports at most one root tree. Ndarray-only
+        // modules have no root allocation and must not index a nonexistent tree.
+        kernel.num_snode_trees = ti_aot_data_.root_buffer_size == 0 ? 0 : 1;
         return true;
       }
     }
@@ -168,22 +170,6 @@ class AotModuleImpl : public aot::Module {
     return std::make_unique<FieldImpl>(runtime_, field);
   }
 
-  static std::vector<uint32_t> read_spv_file(const std::string &output_dir,
-                                             const TaskAttributes &k) {
-    const std::string spv_path = fmt::format("{}/{}.spv", output_dir, k.name);
-    std::vector<uint32_t> source_code;
-    std::ifstream fs(spv_path, std::ios_base::binary | std::ios::ate);
-    if (fs.is_open()) {
-      size_t size = fs.tellg();
-      fs.seekg(0, std::ios::beg);
-      source_code.resize(size / sizeof(uint32_t));
-      fs.read((char *)source_code.data(), size);
-      fs.close();
-    }
-    return source_code;
-  }
-
-  std::string module_path_;
   TaichiAotData ti_aot_data_;
   GfxRuntime *runtime_{nullptr};
   Arch device_api_backend_;

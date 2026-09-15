@@ -6,6 +6,7 @@
 #include "taichi/system/profiler.h"
 
 #include <typeindex>
+#include <cstdint>
 
 namespace taichi::lang {
 
@@ -82,7 +83,7 @@ class WholeKernelCSE : public BasicStmtVisitor {
       // Hash the addresses of the operand pointers.
       hash_code =
           (hash_code * 33) ^
-          (std::hash<unsigned long>{}(reinterpret_cast<unsigned long>(x)));
+          (std::hash<std::uintptr_t>{}(reinterpret_cast<std::uintptr_t>(x)));
     }
     return hash_type ^ hash_code;
   }

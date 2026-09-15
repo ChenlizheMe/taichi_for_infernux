@@ -1,8 +1,9 @@
 #*********************************************************************
 # The Taichi Programming Language
+# Modified by the Infernux project in 2026 for engine-wheel JIT builds.
 #*********************************************************************
 
-cmake_minimum_required(VERSION 3.17)
+cmake_minimum_required(VERSION 3.25)
 
 project(taichi_for_infernux)
 
@@ -12,7 +13,6 @@ include(cmake/InfernuxJitPolicy.cmake)
 include("cmake/utils.cmake")
 
 if (NOT DEFINED TI_VERSION_MAJOR)
-    message(WARNING "It seems that you are running cmake manually, which may cause issues. Please use setup.py to build taichi from source, see https://docs.taichi-lang.org/docs/dev_install for more details.")
     file(READ "${CMAKE_CURRENT_LIST_DIR}/version.txt" TI_VERSION_LITERAL)
     string(REGEX MATCH "v([0-9]+)\\.([0-9]+)\\.([0-9]+)" TI_VERSION_LITERAL ${TI_VERSION_LITERAL})
     set(TI_VERSION_MAJOR ${CMAKE_MATCH_1})
@@ -104,21 +104,15 @@ if (USE_MOLD)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=mold")
 endif()
 
-if (WIN32)
-  # For `Debug` configs MSVC links to a debuggable runtime by default which has
-  # symbol conflicts with the prebuilt LLVM in `Release`. We should be providing
-  # prebuilt LLVMs for both `Debug` and `Release` but LLVM 10 cannot be built by
-  # MSVC in `Debug` config because MSVC would try to fill uninitialize memory
-  # with `0xCC` but it too breaks `LLVMTableGen` which is depended on by almost
-  # every component in LLVM.
-  message("CMAKE_MSVC_RUNTIME_LIBRARY: ${CMAKE_MSVC_RUNTIME_LIBRARY}")
-endif()
-
 # No support of Python for Android build; or in any case taichi is integrated
 # in another project as submodule.
-option(TI_WITH_PYTHON "Build with Python language binding" ON)
 if (TI_WITH_PYTHON AND NOT ANDROID)
+    find_package(Python 3.13 EXACT REQUIRED COMPONENTS Interpreter Development.Module NumPy)
     include(cmake/PythonNumpyPybind11.cmake)
+else()
+    # SPIR-V instruction tables require the same build interpreter even when
+    # no Python extension is requested.
+    find_package(Python 3.13 EXACT REQUIRED COMPONENTS Interpreter)
 endif()
 
 if (TI_WITH_BACKTRACE)
@@ -137,13 +131,6 @@ option(TI_BUILD_TESTS "Build the CPP tests" OFF)
 if (TI_BUILD_TESTS)
   add_subdirectory(external/googletest EXCLUDE_FROM_ALL)
   include(cmake/TaichiTests.cmake)
-endif()
-
-option(TI_BUILD_EXAMPLES "Build the CPP examples" ON)
-option(TI_BUILD_RHI_EXAMPLES "Build the Unified Device API examples" OFF)
-
-if(NOT TI_WITH_LLVM OR NOT TI_WITH_METAL)
-    set(TI_BUILD_EXAMPLES OFF)
 endif()
 
 message("C++ Flags: ${CMAKE_CXX_FLAGS}")
@@ -166,71 +153,34 @@ if (TI_WITH_DX12)
     set(DX12_ARCH "dx12")
 endif()
 
-if (TI_WITH_LLVM)
-    # Setup CLANG_EXECUTABLE
-    if (CLANG_EXECUTABLE)
-      message("CLANG_EXECUTABLE defined: ${CLANG_EXECUTABLE}")
-    elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-      set (CLANG_EXECUTABLE ${CMAKE_CXX_COMPILER})
-      message("Clang executable using host compiler ${CLANG_EXECUTABLE}")
-    else()
-      find_program(CLANG_EXECUTABLE NAMES clang-15 clang-14 clang-13 clang-12 clang-11 clang-10 clang-9 clang-8 clang-7 clang)
-      message("Clang executable found at ${CLANG_EXECUTABLE}")
-    endif()
-
-    if (NOT CLANG_EXECUTABLE)
-      message(FATAL_ERROR "Cannot find any clang executable.")
-    endif()
-
-    macro(check_clang_version)
-      execute_process(COMMAND ${CLANG_EXECUTABLE} --version OUTPUT_VARIABLE CLANG_VERSION_OUTPUT)
-      string(REGEX MATCH "([0-9]+)\\.[0-9]+(\\.[0-9]+)?" CLANG_VERSION "${CLANG_VERSION_OUTPUT}")
-
-      message("${CLANG_EXECUTABLE} --version: ${CLANG_VERSION}")
-
-      set(CLANG_VERSION_MAJOR "${CMAKE_MATCH_1}")
-    endmacro()
-
-    if (APPLE)
-      set(CLANG_OSX_FLAGS "-isysroot${CMAKE_OSX_SYSROOT}")
-    endif()
-
-    # Highest clang version that we've tested
-    set(CLANG_HIGHEST_VERSION "15")
-
-    check_clang_version()
-
-    add_subdirectory(taichi/runtime/llvm/runtime_module)
-endif()
-
 configure_file(taichi/common/version.h.in ${CMAKE_SOURCE_DIR}/taichi/common/version.h)
 configure_file(taichi/common/commit_hash.h.in ${CMAKE_SOURCE_DIR}/taichi/common/commit_hash.h)
 
-option(TI_WITH_C_API "build taichi runtime c-api library" ON)  # wheel-tag: aot
-option(TI_WITH_STATIC_C_API "build static taichi runtime c-api library" OFF)  # wheel-tag: static_aot
-
-if(TI_WITH_STATIC_C_API)
-    set(TI_WITH_C_API ${TI_WITH_STATIC_C_API})
-    if(NOT APPLE)
-        message(FATAL_ERROR "TI_WITH_STATIC_C_API requires Apple compilation sdk, thus only supported on MacOS")
-    endif()
-endif()
-
-if (TI_WITH_C_API)
-  include(cmake/TaichiCAPI.cmake)
-  if (TI_BUILD_TESTS)
-    include(cmake/TaichiCAPITests.cmake)
+option(INFERNUX_BUILD_TESTS "Build engine-integration native contract tests" OFF)
+if(INFERNUX_BUILD_TESTS)
+  enable_testing()
+  add_executable(infernux_compiler_contract_tests tests/infernux/compiler_contract.cpp)
+  target_link_libraries(infernux_compiler_contract_tests PRIVATE ${CORE_LIBRARY_NAME})
+  target_include_directories(infernux_compiler_contract_tests PRIVATE
+    ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/external/eigen ${PROJECT_SOURCE_DIR}/external/spdlog/include)
+  if(MSVC)
+    target_compile_options(infernux_compiler_contract_tests PRIVATE /utf-8 /UNDEBUG)
+  else()
+    target_compile_options(infernux_compiler_contract_tests PRIVATE -UNDEBUG)
   endif()
+  add_test(NAME infernux.compiler_contract COMMAND infernux_compiler_contract_tests)
+  add_executable(infernux_bit_contract_tests tests/infernux/bit_contract.cpp)
+  target_link_libraries(infernux_bit_contract_tests PRIVATE taichi_util)
+  target_include_directories(infernux_bit_contract_tests PRIVATE ${PROJECT_SOURCE_DIR})
+  if(MSVC)
+    target_compile_options(infernux_bit_contract_tests PRIVATE /utf-8 /UNDEBUG)
+  else()
+    target_compile_options(infernux_bit_contract_tests PRIVATE -UNDEBUG)
+  endif()
+  add_test(NAME infernux.bit_contract COMMAND infernux_bit_contract_tests)
+  set_target_properties(infernux_compiler_contract_tests infernux_bit_contract_tests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/tests/$<CONFIG>")
 endif()
-
-if (TI_BUILD_EXAMPLES)
-  include(cmake/TaichiExamples.cmake)
-endif()
-
-if (TI_BUILD_RHI_EXAMPLES)
-  add_subdirectory(cpp_examples/rhi_examples)
-endif()
-
 
 include(cmake/InfernuxCompilerOutput.cmake)
 if(TI_WITH_PYTHON AND NOT ANDROID)

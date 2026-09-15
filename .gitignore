@@ -82,6 +82,10 @@ _build
 *.dot
 *.json
 !CMakePresets.json
+!package/inx_package.json
+/package/runtime/infernux_taichi/_vendor/
+/package/runtime/infernux_taichi/licenses/
+/*.inxpkg
 !tests/**/*.json
 !docs/**/*.json
 imgui.ini

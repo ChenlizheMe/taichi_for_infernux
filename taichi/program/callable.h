@@ -1,6 +1,6 @@
 #pragma once
 #include "taichi/inc/constants.h"
-#include "taichi/rhi/device.h"
+#include "taichi/ir/texture_format.h"
 #include "taichi/util/lang_util.h"
 
 #include <stack>

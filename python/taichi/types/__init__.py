@@ -1,17 +1,23 @@
-"""
-This module defines data types in Taichi:
+# Modified by Infernux in 2026: private compiler-relative imports.
+"""Minimal type surface retained for the Infernux Vulkan compiler frontend.
 
-- primitive: int, float, etc.
-- compound: matrix, vector, struct.
-- template: for reference types.
-- ndarray: for arbitrary arrays.
-- quant: for quantized types, see "https://yuanming.taichi.graphics/publication/2021-quantaichi/quantaichi.pdf"
+The fork no longer publishes Taichi's quantized, texture or container author
+API from this package. External-array annotations are a temporary private IR
+bridge for ``inx.buffer`` and are constructed only by Infernux.
 """
 
-from taichi.types import quant
-from taichi.types.annotations import *
-from taichi.types.compound_types import *
-from taichi.types.ndarray_type import *
-from taichi.types.primitive_types import *
-from taichi.types.texture_type import *
-from taichi.types.utils import *
+from . import annotations, buffer_type, primitive_types
+from .annotations import template
+from .buffer_type import BufferType, BufferTypeMetadata, external_buffer
+from .compound_types import CompoundType, matrix, vector
+from .primitive_types import *
+
+__all__ = [
+    "CompoundType",
+    "BufferType",
+    "BufferTypeMetadata",
+    "matrix",
+    "external_buffer",
+    "template",
+    "vector",
+]

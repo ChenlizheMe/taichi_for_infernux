@@ -1,7 +1,6 @@
 #include "taichi/program/function.h"
 #include "taichi/program/program.h"
 #include "taichi/ir/transforms.h"
-#include "taichi/analysis/offline_cache_util.h"
 
 namespace taichi::lang {
 
@@ -24,11 +23,6 @@ void Function::set_function_body(const std::function<void()> &func) {
   finalize_params();
   finalize_rets();
 
-  if (program->compile_config().offline_cache) {  // For generating AST-Key
-    std::ostringstream oss;
-    gen_offline_cache_key(ir.get(), &oss);
-    ast_serialization_data_ = oss.str();
-  }
 }
 
 void Function::set_function_body(std::unique_ptr<IRNode> func_body) {

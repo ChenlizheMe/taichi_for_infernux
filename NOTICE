@@ -11,6 +11,24 @@ https://github.com/ChenlizheMe/Infernux
 
 Infernux modifications begun in 2026 establish a JIT-only compiler build
 policy, engine-wheel output layout, and fork-specific documentation/CI.
+They also remove independent runtime/resource ownership from the active
+compiler path, replace public-package imports with private engine imports,
+and prune Python field/SNode/device-array authoring implementations.
+Kernel specialization uses engine buffer descriptions instead of runtime
+array placeholders; unused automatic gradient and class-kernel paths are removed.
+Compiled kernel IR ownership is request-local rather than retained by global
+Python/native kernel registries; generated-source entries are scoped to lowering.
+Standalone function specialization/call APIs and their caches are removed in
+favor of engine-declared inline helpers. Borrowed compiler views retain their
+native owners; return annotations use the supported Python typing interfaces.
+The native context now directly invokes the SPIR-V compiler; obsolete backend
+interfaces, singleton finalization and global IR-counter resets are removed.
+Compiler output no longer carries TIC serialization, hashing or launch handles.
+Texture-format and device-capability descriptions no longer import upstream
+device/runtime declarations. The old host-adapter transfer/command implementation
+and its device API target are removed; backend policy is defined once for builds.
+The unused LLVM kernel dispatcher and CUDA/DirectX driver includes are removed
+from the active compiler sources.
 The ongoing integration narrows this dependency to Vulkan SPIR-V generation;
 buffer ownership, device management and execution belong to Infernux.
 This notice does not claim that the compiler-only migration is complete.

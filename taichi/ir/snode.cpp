@@ -176,30 +176,6 @@ int SNode::shape_along_axis(int i) const {
   return extractor.num_elements_from_root;
 }
 
-int64 SNode::read_int(const std::vector<int> &i) {
-  return snode_rw_accessors_bank_->get(this).read_int(i);
-}
-
-uint64 SNode::read_uint(const std::vector<int> &i) {
-  return snode_rw_accessors_bank_->get(this).read_uint(i);
-}
-
-float64 SNode::read_float(const std::vector<int> &i) {
-  return snode_rw_accessors_bank_->get(this).read_float(i);
-}
-
-void SNode::write_int(const std::vector<int> &i, int64 val) {
-  snode_rw_accessors_bank_->get(this).write_int(i, val);
-}
-
-void SNode::write_uint(const std::vector<int> &i, uint64 val) {
-  snode_rw_accessors_bank_->get(this).write_uint(i, val);
-}
-
-void SNode::write_float(const std::vector<int> &i, float64 val) {
-  snode_rw_accessors_bank_->get(this).write_float(i, val);
-}
-
 Expr SNode::get_expr() const {
   return Expr(snode_to_fields_->at(this));
 }

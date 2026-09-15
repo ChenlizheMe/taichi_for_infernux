@@ -1,3 +1,4 @@
+# Modified by Infernux in 2026: private compiler-relative imports.
 import ast
 import builtins
 import traceback
@@ -6,8 +7,8 @@ from sys import version_info
 from textwrap import TextWrapper
 from typing import List
 
-from taichi.lang import impl
-from taichi.lang.exception import (
+from .. import impl
+from ..exception import (
     TaichiCompilationError,
     TaichiNameError,
     TaichiSyntaxError,
@@ -155,7 +156,6 @@ class ASTTransformerContext:
         src=None,
         start_lineno=None,
         ast_builder=None,
-        is_real_function=False,
     ):
         self.func = func
         self.local_scopes = []
@@ -182,7 +182,6 @@ class ASTTransformerContext:
         self.returned = ReturnStatus.NoReturn
         self.ast_builder = ast_builder
         self.visited_funcdef = False
-        self.is_real_function = is_real_function
         self.kernel_args = []
 
     # e.g.: FunctionDef, Module, Global
@@ -256,7 +255,7 @@ class ASTTransformerContext:
                 return s[name]
         if name in self.global_vars:
             var = self.global_vars[name]
-            from taichi.lang.matrix import Matrix, make_matrix  # pylint: disable-msg=C0415
+            from ..matrix import Matrix, make_matrix  # pylint: disable-msg=C0415
 
             if isinstance(var, Matrix):
                 return make_matrix(var.to_list())

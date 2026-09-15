@@ -1,15 +1,31 @@
+// Modified for Infernux: retain a host RHI adapter instead of creating a GPU.
 #include "gfx_program.h"
 
-#include "taichi/analysis/offline_cache_util.h"
 #include "taichi/codegen/spirv/kernel_compiler.h"
-#include "taichi/rhi/opengl/opengl_api.h"
-#include "taichi/runtime/gfx/aot_module_builder_impl.h"
 #include "taichi/runtime/gfx/kernel_launcher.h"
-#include "taichi/rhi/common/host_memory_pool.h"
 
 namespace taichi::lang {
 
-GfxProgramImpl::GfxProgramImpl(CompileConfig &config) : ProgramImpl(config) {
+GfxProgramImpl::GfxProgramImpl(CompileConfig &config,
+                               std::shared_ptr<Device> device)
+    : ProgramImpl(config), device_(std::move(device)) {}
+
+void GfxProgramImpl::materialize_runtime(KernelProfilerBase *profiler,
+                                         uint64 **result_buffer_ptr) {
+  TI_ASSERT_INFO(device_ != nullptr, "An engine compute device is required");
+  TI_ASSERT_INFO(!runtime_, "Compute runtime is already materialized");
+  gfx::GfxRuntime::Params params;
+  params.device = device_.get();
+  params.profiler = profiler;
+  runtime_ = std::make_unique<gfx::GfxRuntime>(params);
+  snode_tree_mgr_ = std::make_unique<gfx::SNodeTreeManager>(runtime_.get());
+  *result_buffer_ptr = host_result_buffer_.data();
+}
+
+void GfxProgramImpl::enqueue_compute_op_lambda(
+    std::function<void(Device *, CommandList *)> op,
+    const std::vector<ComputeOpImageRef> &image_refs) {
+  runtime_->enqueue_compute_op_lambda(std::move(op), image_refs);
 }
 
 void GfxProgramImpl::compile_snode_tree_types(SNodeTree *tree) {
@@ -25,19 +41,6 @@ void GfxProgramImpl::compile_snode_tree_types(SNodeTree *tree) {
 void GfxProgramImpl::materialize_snode_tree(SNodeTree *tree,
                                             uint64 *result_buffer) {
   snode_tree_mgr_->materialize_snode_tree(tree);
-}
-
-std::unique_ptr<AotModuleBuilder> GfxProgramImpl::make_aot_module_builder(
-    const DeviceCapabilityConfig &caps) {
-  if (runtime_) {
-    return std::make_unique<gfx::AotModuleBuilderImpl>(
-        snode_tree_mgr_->get_compiled_structs(),
-        get_kernel_compilation_manager(), *config, caps);
-  } else {
-    return std::make_unique<gfx::AotModuleBuilderImpl>(
-        aot_compiled_snode_structs_, get_kernel_compilation_manager(), *config,
-        caps);
-  }
 }
 
 DeviceAllocation GfxProgramImpl::allocate_memory_on_device(
@@ -57,6 +60,9 @@ DeviceAllocation GfxProgramImpl::allocate_texture(const ImageParams &params) {
 }
 
 void GfxProgramImpl::finalize() {
+  if (runtime_)
+    runtime_->synchronize();
+  snode_tree_mgr_.reset();
   runtime_.reset();
   device_.reset();
 }
@@ -80,8 +86,11 @@ std::unique_ptr<KernelLauncher> GfxProgramImpl::make_kernel_launcher() {
 }
 
 DeviceCapabilityConfig GfxProgramImpl::get_device_caps() {
-  TI_ASSERT(runtime_);
-  return runtime_->get_ti_device()->get_caps();
+  if (device_)
+    return device_->get_caps();
+  DeviceCapabilityConfig caps;
+  caps.set(DeviceCapability::spirv_version, 0x10300);
+  return caps;
 }
 
 }  // namespace taichi::lang

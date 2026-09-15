@@ -1,6 +1,7 @@
 /*******************************************************************************
     Copyright (c) The Taichi Authors (2016- ). All Rights Reserved.
     The use of this software is governed by the LICENSE file.
+    Modified by the Infernux project in 2026: remove GUI binding declarations.
 *******************************************************************************/
 
 #pragma once
@@ -32,9 +33,5 @@ void export_lang(py::module &m);
 void export_math(py::module &m);
 
 void export_misc(py::module &m);
-
-void export_visual(py::module &m);
-
-void export_ggui(py::module &m);
 
 }  // namespace taichi

@@ -326,13 +326,6 @@ class SNode {
 
   void allocate_adjoint_checkbit();
 
-  int64 read_int(const std::vector<int> &i);
-  uint64 read_uint(const std::vector<int> &i);
-  float64 read_float(const std::vector<int> &i);
-  void write_int(const std::vector<int> &i, int64 val);
-  void write_uint(const std::vector<int> &i, uint64 val);
-  void write_float(const std::vector<int> &i, float64 val);
-
   Expr get_expr() const;
 
   uint64 fetch_reader_result();  // TODO: refactor

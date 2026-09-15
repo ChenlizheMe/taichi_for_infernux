@@ -1,54 +1,34 @@
+# Modified by Infernux in 2026: private compiler-relative imports.
 import numbers
 from types import FunctionType, MethodType
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable
 
 import numpy as np
-from taichi._lib import core as _ti_core
-from taichi._snode.fields_builder import FieldsBuilder
-from taichi.lang._ndarray import ScalarNdarray
-from taichi.lang._ndrange import GroupedNDRange, _Ndrange
-from taichi.lang._texture import RWTextureAccessor
-from taichi.lang.any_array import AnyArray
-from taichi.lang.enums import SNodeGradType
-from taichi.lang.exception import (
+from .._lib import core as _ti_core
+from ._ndrange import GroupedNDRange, _Ndrange
+from .any_array import AnyArray
+from .exception import (
     TaichiCompilationError,
     TaichiRuntimeError,
     TaichiSyntaxError,
     TaichiTypeError,
 )
-from taichi.lang.expr import Expr, make_expr_group
-from taichi.lang.field import Field, ScalarField
-from taichi.lang.kernel_arguments import SparseMatrixProxy
-from taichi.lang.matrix import (
+from .expr import Expr, make_expr_group
+from .matrix import (
     Matrix,
-    MatrixField,
-    MatrixNdarray,
     MatrixType,
     Vector,
-    VectorNdarray,
     make_matrix,
 )
-from taichi.lang.mesh import (
-    ConvType,
-    MeshElementFieldProxy,
-    MeshInstance,
-    MeshRelationAccessProxy,
-    MeshReorderedMatrixFieldProxy,
-    MeshReorderedScalarFieldProxy,
-    element_type_name,
-)
-from taichi.lang.simt.block import SharedArray
-from taichi.lang.snode import SNode
-from taichi.lang.struct import Struct, StructField, _IntermediateStruct
-from taichi.lang.util import (
+from .struct import Struct
+from .util import (
     cook_dtype,
-    get_traceback,
     is_taichi_class,
     python_scope,
     taichi_scope,
     warning,
 )
-from taichi.types.primitive_types import (
+from ..types.primitive_types import (
     all_types,
     f16,
     f32,
@@ -59,6 +39,21 @@ from taichi.types.primitive_types import (
     u32,
     u64,
 )
+
+
+class _UnsupportedCompilerFeature:
+    """Sentinel for Taichi runtime features excluded from Infernux kernels."""
+
+    def __init__(self, *args, **kwargs):
+        raise TaichiRuntimeError("Infernux GPU kernels use inx.buffer; Taichi fields are not supported")
+
+
+SharedArray = _UnsupportedCompilerFeature
+MeshElementFieldProxy = _UnsupportedCompilerFeature
+MeshInstance = _UnsupportedCompilerFeature
+MeshRelationAccessProxy = _UnsupportedCompilerFeature
+MeshReorderedMatrixFieldProxy = _UnsupportedCompilerFeature
+MeshReorderedScalarFieldProxy = _UnsupportedCompilerFeature
 
 
 @taichi_scope
@@ -111,17 +106,10 @@ def expr_init(rhs):
     )
 
 
-@taichi_scope
-def expr_init_func(rhs):  # temporary solution to allow passing in fields as arguments
-    if isinstance(rhs, Field):
-        return rhs
-    return expr_init(rhs)
-
-
 def begin_frontend_struct_for(ast_builder, group, loop_range):
-    if not isinstance(loop_range, (AnyArray, Field, SNode, RWTextureAccessor, _Root)):
+    if not isinstance(loop_range, AnyArray):
         raise TypeError(
-            f"Cannot loop over the object {type(loop_range)} in Taichi scope. Only Taichi fields (via template) or dense arrays (via types.ndarray) are supported."
+            f"Cannot lower a buffer loop over {type(loop_range)}; an external buffer expression is required."
         )
     if group.size() != len(loop_range.shape):
         raise IndexError(
@@ -130,10 +118,7 @@ def begin_frontend_struct_for(ast_builder, group, loop_range):
             'use "for I in ti.grouped(x)" to group all indices into a single vector I?'
         )
     dbg_info = _ti_core.DebugInfo(get_runtime().get_current_src_info())
-    if isinstance(loop_range, (AnyArray, RWTextureAccessor)):
-        ast_builder.begin_frontend_struct_for_on_external_tensor(group, loop_range._loop_range(), dbg_info)
-    else:
-        ast_builder.begin_frontend_struct_for_on_snode(group, loop_range._loop_range(), dbg_info)
+    ast_builder.begin_frontend_struct_for_on_external_tensor(group, loop_range._loop_range(), dbg_info)
 
 
 def begin_frontend_if(ast_builder, cond, stmt_dbg_info):
@@ -165,10 +150,6 @@ def _calc_slice(index, default_stop):
 
 
 def validate_subscript_index(value, index):
-    if isinstance(value, Field):
-        # field supports negative indices
-        return
-
     if isinstance(index, Expr):
         return
 
@@ -193,9 +174,7 @@ def subscript(ast_builder, value, *_indices, skip_reordered=False):
         value,
         (
             Expr,
-            Field,
             AnyArray,
-            SparseMatrixProxy,
             MeshElementFieldProxy,
             MeshRelationAccessProxy,
             SharedArray,
@@ -246,26 +225,6 @@ def subscript(ast_builder, value, *_indices, skip_reordered=False):
             ]
         )
         return subscript(ast_builder, value, *reordered_index, skip_reordered=True)
-    if isinstance(value, SparseMatrixProxy):
-        return value.subscript(*indices)
-    if isinstance(value, Field):
-        _var = value._get_field_members()[0].ptr
-        snode = _var.snode()
-        if snode is None:
-            if _var.is_primal():
-                raise RuntimeError(f"{_var.get_expr_name()} has not been placed.")
-            else:
-                raise RuntimeError(
-                    f"Gradient {_var.get_expr_name()} has not been placed, check whether `needs_grad=True`"
-                )
-
-        if isinstance(value, MatrixField):
-            return Expr(ast_builder.expr_subscript(value.ptr, indices_expr_group, dbg_info))
-        if isinstance(value, StructField):
-            entries = {k: subscript(ast_builder, v, *indices) for k, v in value._items}
-            entries["__struct_methods"] = value.struct_methods
-            return _IntermediateStruct(entries)
-        return Expr(ast_builder.expr_subscript(_var, indices_expr_group, dbg_info))
     if isinstance(value, AnyArray):
         return Expr(ast_builder.expr_subscript(value.ptr, indices_expr_group, dbg_info))
     assert isinstance(value, Expr)
@@ -319,51 +278,21 @@ class SrcInfoGuard:
 
 
 class PyTaichi:
-    def __init__(self, kernels=None):
-        self.materialized = False
+    def __init__(self):
         self.prog = None
+        # Infernux owns compiler initialization and does not call Taichi's
+        # public ``ti.init`` path.  Keep the AST semantics required by the
+        # private Python-to-SPIR-V frontend on the compiler runtime itself.
+        self.short_circuit_operators = True
+        self.print_full_traceback = False
+        self.unrolling_limit = 32
         self.src_info_stack = []
         self.inside_kernel = False
         self.compiling_callable = None  # pointer to instance of lang::Kernel/Function
         self.current_kernel = None
-        self.global_vars = []
-        self.grad_vars = []
-        self.dual_vars = []
-        self.matrix_fields = []
         self.default_fp = f32
         self.default_ip = i32
         self.default_up = u32
-        self.target_tape = None
-        self.fwd_mode_manager = None
-        self.grad_replaced = False
-        self.kernels = kernels or []
-        self._signal_handler_registry = None
-        self.unfinalized_fields_builder = {}
-
-    def initialize_fields_builder(self, builder):
-        self.unfinalized_fields_builder[builder] = get_traceback(2)
-
-    def clear_compiled_functions(self):
-        for k in self.kernels:
-            k.compiled_kernels.clear()
-
-    def finalize_fields_builder(self, builder):
-        self.unfinalized_fields_builder.pop(builder)
-
-    def validate_fields_builder(self):
-        for builder, tb in self.unfinalized_fields_builder.items():
-            if builder == _root_fb:
-                continue
-
-            raise TaichiRuntimeError(
-                f"Field builder {builder} is not finalized. " f"Please call finalize() on it. Traceback:\n{tb}"
-            )
-
-    def get_num_compiled_functions(self):
-        count = 0
-        for k in self.kernels:
-            count += len(k.compiled_kernels)
-        return count
 
     def src_info_guard(self, info):
         return SrcInfoGuard(self.src_info_stack, info)
@@ -387,133 +316,11 @@ class PyTaichi:
         if self.prog is None:
             self.prog = _ti_core.Program()
 
-    @staticmethod
-    def materialize_root_fb(is_first_call):
-        if root.finalized:
-            return
-        if not is_first_call and root.empty:
-            # We have to forcefully finalize when `is_first_call` is True (even
-            # if the root itself is empty), so that there is a valid struct
-            # llvm::Module, if no field has been declared before the first kernel
-            # invocation. Example case:
-            # https://github.com/taichi-dev/taichi/blob/27bb1dc3227d9273a79fcb318fdb06fd053068f5/tests/python/test_ad_basics.py#L260-L266
-            return
-
-        if get_runtime().prog.config().debug:
-            if not root.finalized:
-                root._allocate_adjoint_checkbit()
-
-        root.finalize(raise_warning=not is_first_call)
-        global _root_fb
-        _root_fb = FieldsBuilder()
-
-    @staticmethod
-    def _finalize_root_fb_for_aot():
-        if _root_fb.finalized:
-            raise RuntimeError("AOT: can only finalize the root FieldsBuilder once")
-        _root_fb._finalize_for_aot()
-
-    @staticmethod
-    def _get_tb(_var):
-        return getattr(_var, "declaration_tb", str(_var.ptr))
-
-    def _check_field_not_placed(self):
-        not_placed = []
-        for _var in self.global_vars:
-            if _var.ptr.snode() is None:
-                not_placed.append(self._get_tb(_var))
-
-        if len(not_placed):
-            bar = "=" * 44 + "\n"
-            raise RuntimeError(
-                f"These field(s) are not placed:\n{bar}"
-                + f"{bar}".join(not_placed)
-                + f"{bar}Please consider specifying a shape for them. E.g.,"
-                + "\n\n  x = ti.field(float, shape=(2, 3))"
-            )
-
-    def _check_gradient_field_not_placed(self, gradient_type):
-        not_placed = set()
-        gradient_vars = []
-        if gradient_type == "grad":
-            gradient_vars = self.grad_vars
-        elif gradient_type == "dual":
-            gradient_vars = self.dual_vars
-        for _var in gradient_vars:
-            if _var.ptr.snode() is None:
-                not_placed.add(self._get_tb(_var))
-
-        if len(not_placed):
-            bar = "=" * 44 + "\n"
-            raise RuntimeError(
-                f"These field(s) requrie `needs_{gradient_type}=True`, however their {gradient_type} field(s) are not placed:\n{bar}"
-                + f"{bar}".join(not_placed)
-                + f"{bar}Please consider place the {gradient_type} field(s). E.g.,"
-                + "\n\n  ti.root.dense(ti.i, 1).place(x.{gradient_type})"
-                + "\n\n Or specify a shape for the field(s). E.g.,"
-                + "\n\n  x = ti.field(float, shape=(2, 3), needs_{gradient_type}=True)"
-            )
-
-    def _check_matrix_field_member_shape(self):
-        for _field in self.matrix_fields:
-            shapes = [_field.get_scalar_field(i, j).shape for i in range(_field.n) for j in range(_field.m)]
-            if any(shape != shapes[0] for shape in shapes):
-                raise RuntimeError(
-                    "Members of the following field have different shapes "
-                    + f"{shapes}:\n{self._get_tb(_field._get_field_members()[0])}"
-                )
-
-    def _calc_matrix_field_dynamic_index_stride(self):
-        for _field in self.matrix_fields:
-            _field._calc_dynamic_index_stride()
-
-    def materialize(self):
-        self.materialize_root_fb(not self.materialized)
-        self.materialized = True
-
-        self.validate_fields_builder()
-
-        self._check_field_not_placed()
-        self._check_gradient_field_not_placed("grad")
-        self._check_gradient_field_not_placed("dual")
-        self._check_matrix_field_member_shape()
-        self._calc_matrix_field_dynamic_index_stride()
-        self.global_vars = []
-        self.grad_vars = []
-        self.dual_vars = []
-        self.matrix_fields = []
-
-    def _register_signal_handlers(self):
-        if self._signal_handler_registry is None:
-            self._signal_handler_registry = _ti_core.HackedSignalRegister()
-
-    def clear(self):
-        if self.prog:
-            self.prog.finalize()
-            self.prog = None
-        self._signal_handler_registry = None
-        self.materialized = False
-
-    def sync(self):
-        self.materialize()
-        self.prog.synchronize()
-
-
 pytaichi = PyTaichi()
 
 
 def get_runtime():
     return pytaichi
-
-
-def reset():
-    global pytaichi
-    old_kernels = pytaichi.kernels
-    pytaichi.clear()
-    pytaichi = PyTaichi(old_kernels)
-    for k in old_kernels:
-        k.reset()
-    _ti_core.reset_default_compile_config()
 
 
 @taichi_scope
@@ -554,309 +361,6 @@ def static_assert(cond, msg=None):
 
 def inside_kernel():
     return pytaichi.inside_kernel
-
-
-def index_nd(dim):
-    return axes(*range(dim))
-
-
-class _UninitializedRootFieldsBuilder:
-    def __getattr__(self, item):
-        if item == "__qualname__":
-            # For sphinx docstring extraction.
-            return "_UninitializedRootFieldsBuilder"
-        raise TaichiRuntimeError("Please call init() first")
-
-
-# `root` initialization must be delayed until after the program is
-# created. Unfortunately, `root` exists in both taichi.lang.impl module and
-# the top-level taichi module at this point; so if `root` itself is written, we
-# would have to make sure that `root` in all the modules get updated to the same
-# instance. This is an error-prone process.
-#
-# To avoid this situation, we create `root` once during the import time, and
-# never write to it. The core part, `_root_fb`, is the one whose initialization
-# gets delayed. `_root_fb` will only exist in the taichi.lang.impl module, so
-# writing to it is would result in less for maintenance cost.
-#
-# `_root_fb` will be overridden inside :func:`taichi.lang.init`.
-_root_fb = _UninitializedRootFieldsBuilder()
-
-
-def deactivate_all_snodes():
-    """Recursively deactivate all SNodes."""
-    for root_fb in FieldsBuilder._finalized_roots():
-        root_fb.deactivate_all()
-
-
-class _Root:
-    """Wrapper around the default root FieldsBuilder instance."""
-
-    @staticmethod
-    def parent(n=1):
-        """Same as :func:`taichi.SNode.parent`"""
-        return _root_fb.root.parent(n)
-
-    @staticmethod
-    def _loop_range():
-        """Same as :func:`taichi.SNode.loop_range`"""
-        return _root_fb.root._loop_range()
-
-    @staticmethod
-    def _get_children():
-        """Same as :func:`taichi.SNode.get_children`"""
-        return _root_fb.root._get_children()
-
-    # TODO: Record all of the SNodeTrees that finalized under 'ti.root'
-    @staticmethod
-    def deactivate_all():
-        warning("""'ti.root.deactivate_all()' would deactivate all finalized snodes.""")
-        deactivate_all_snodes()
-
-    @property
-    def shape(self):
-        """Same as :func:`taichi.SNode.shape`"""
-        return _root_fb.root.shape
-
-    @property
-    def _id(self):
-        return _root_fb.root._id
-
-    def __getattr__(self, item):
-        return getattr(_root_fb, item)
-
-    def __repr__(self):
-        return "ti.root"
-
-
-root = _Root()
-"""Root of the declared Taichi :func:`~taichi.lang.impl.field`s.
-
-See also https://docs.taichi-lang.org/docs/layout
-
-Example::
-
-    >>> x = ti.field(ti.f32)
-    >>> ti.root.pointer(ti.ij, 4).dense(ti.ij, 8).place(x)
-"""
-
-
-def _create_snode(axis_seq: Sequence[int], shape_seq: Sequence[numbers.Number], same_level: bool):
-    dim = len(axis_seq)
-    assert dim == len(shape_seq)
-    snode = root
-    if same_level:
-        snode = snode.dense(axes(*axis_seq), shape_seq)
-    else:
-        for i in range(dim):
-            snode = snode.dense(axes(axis_seq[i]), (shape_seq[i],))
-    return snode
-
-
-@python_scope
-def create_field_member(dtype, name, needs_grad, needs_dual):
-    dtype = cook_dtype(dtype)
-
-    # primal
-    prog = get_runtime().prog
-    if prog is None:
-        raise TaichiRuntimeError("Cannont create field, maybe you forgot to call `ti.init()` first?")
-
-    x = Expr(prog.make_id_expr(""))
-    x.declaration_tb = get_traceback(stacklevel=4)
-    x.ptr = _ti_core.expr_field(x.ptr, dtype)
-    x.ptr.set_name(name)
-    x.ptr.set_grad_type(SNodeGradType.PRIMAL)
-    pytaichi.global_vars.append(x)
-
-    x_grad = None
-    x_dual = None
-    # The x_grad_checkbit is used for global data access rule checker
-    x_grad_checkbit = None
-    if _ti_core.is_real(dtype):
-        # adjoint
-        x_grad = Expr(get_runtime().prog.make_id_expr(""))
-        x_grad.declaration_tb = get_traceback(stacklevel=4)
-        x_grad.ptr = _ti_core.expr_field(x_grad.ptr, dtype)
-        x_grad.ptr.set_name(name + ".grad")
-        x_grad.ptr.set_grad_type(SNodeGradType.ADJOINT)
-        x.ptr.set_adjoint(x_grad.ptr)
-        if needs_grad:
-            pytaichi.grad_vars.append(x_grad)
-
-        if prog.config().debug:
-            # adjoint checkbit
-            x_grad_checkbit = Expr(get_runtime().prog.make_id_expr(""))
-            dtype = u8
-            if prog.config().arch in (_ti_core.opengl, _ti_core.vulkan, _ti_core.gles):
-                dtype = i32
-            x_grad_checkbit.ptr = _ti_core.expr_field(x_grad_checkbit.ptr, cook_dtype(dtype))
-            x_grad_checkbit.ptr.set_name(name + ".grad_checkbit")
-            x_grad_checkbit.ptr.set_grad_type(SNodeGradType.ADJOINT_CHECKBIT)
-            x.ptr.set_adjoint_checkbit(x_grad_checkbit.ptr)
-
-        # dual
-        x_dual = Expr(get_runtime().prog.make_id_expr(""))
-        x_dual.ptr = _ti_core.expr_field(x_dual.ptr, dtype)
-        x_dual.ptr.set_name(name + ".dual")
-        x_dual.ptr.set_grad_type(SNodeGradType.DUAL)
-        x.ptr.set_dual(x_dual.ptr)
-        if needs_dual:
-            pytaichi.dual_vars.append(x_dual)
-    elif needs_grad or needs_dual:
-        raise TaichiRuntimeError(f"{dtype} is not supported for field with `needs_grad=True` or `needs_dual=True`.")
-
-    return x, x_grad, x_dual
-
-
-@python_scope
-def _field(
-    dtype,
-    shape=None,
-    order=None,
-    name="",
-    offset=None,
-    needs_grad=False,
-    needs_dual=False,
-):
-    x, x_grad, x_dual = create_field_member(dtype, name, needs_grad, needs_dual)
-    x = ScalarField(x)
-    if x_grad:
-        x_grad = ScalarField(x_grad)
-        x._set_grad(x_grad)
-    if x_dual:
-        x_dual = ScalarField(x_dual)
-        x._set_dual(x_dual)
-
-    if shape is None:
-        if offset is not None:
-            raise TaichiSyntaxError("shape cannot be None when offset is set")
-        if order is not None:
-            raise TaichiSyntaxError("shape cannot be None when order is set")
-    else:
-        if isinstance(shape, numbers.Number):
-            shape = (shape,)
-        if isinstance(offset, numbers.Number):
-            offset = (offset,)
-        dim = len(shape)
-        if offset is not None and dim != len(offset):
-            raise TaichiSyntaxError(f"The dimensionality of shape and offset must be the same ({dim} != {len(offset)})")
-        axis_seq = []
-        shape_seq = []
-        if order is not None:
-            if dim != len(order):
-                raise TaichiSyntaxError(
-                    f"The dimensionality of shape and order must be the same ({dim} != {len(order)})"
-                )
-            if dim != len(set(order)):
-                raise TaichiSyntaxError("The axes in order must be different")
-            for ch in order:
-                axis = ord(ch) - ord("i")
-                if axis < 0 or axis >= dim:
-                    raise TaichiSyntaxError(f"Invalid axis {ch}")
-                axis_seq.append(axis)
-                shape_seq.append(shape[axis])
-        else:
-            axis_seq = list(range(dim))
-            shape_seq = list(shape)
-        same_level = order is None
-        _create_snode(axis_seq, shape_seq, same_level).place(x, offset=offset)
-        if needs_grad:
-            _create_snode(axis_seq, shape_seq, same_level).place(x_grad, offset=offset)
-        if needs_dual:
-            _create_snode(axis_seq, shape_seq, same_level).place(x_dual, offset=offset)
-    return x
-
-
-@python_scope
-def field(dtype, *args, **kwargs):
-    """Defines a Taichi field.
-
-    A Taichi field can be viewed as an abstract N-dimensional array, hiding away
-    the complexity of how its underlying :class:`~taichi.lang.snode.SNode` are
-    actually defined. The data in a Taichi field can be directly accessed by
-    a Taichi :func:`~taichi.lang.kernel_impl.kernel`.
-
-    See also https://docs.taichi-lang.org/docs/field
-
-    Args:
-        dtype (DataType): data type of the field. Note it can be vector or matrix types as well.
-        shape (Union[int, tuple[int]], optional): shape of the field.
-        order (str, optional): order of the shape laid out in memory.
-        name (str, optional): name of the field.
-        offset (Union[int, tuple[int]], optional): offset of the field domain.
-        needs_grad (bool, optional): whether this field participates in autodiff (reverse mode)
-            and thus needs an adjoint field to store the gradients.
-        needs_dual (bool, optional): whether this field participates in autodiff (forward mode)
-            and thus needs an dual field to store the gradients.
-
-    Example::
-
-        The code below shows how a Taichi field can be declared and defined::
-
-            >>> x1 = ti.field(ti.f32, shape=(16, 8))
-            >>> # Equivalently
-            >>> x2 = ti.field(ti.f32)
-            >>> ti.root.dense(ti.ij, shape=(16, 8)).place(x2)
-            >>>
-            >>> x3 = ti.field(ti.f32, shape=(16, 8), order='ji')
-            >>> # Equivalently
-            >>> x4 = ti.field(ti.f32)
-            >>> ti.root.dense(ti.j, shape=8).dense(ti.i, shape=16).place(x4)
-            >>>
-            >>> x5 = ti.field(ti.math.vec3, shape=(16, 8))
-
-    """
-    if isinstance(dtype, MatrixType):
-        if dtype.ndim == 1:
-            return Vector.field(dtype.n, dtype.dtype, *args, **kwargs)
-        return Matrix.field(dtype.n, dtype.m, dtype.dtype, *args, **kwargs)
-    return _field(dtype, *args, **kwargs)
-
-
-@python_scope
-def ndarray(dtype, shape, needs_grad=False):
-    """Defines a Taichi ndarray with scalar elements.
-
-    Args:
-        dtype (Union[DataType, MatrixType]): Data type of each element. This can be either a scalar type like ti.f32 or a compound type like ti.types.vector(3, ti.i32).
-        shape (Union[int, tuple[int]]): Shape of the ndarray.
-
-    Example:
-        The code below shows how a Taichi ndarray with scalar elements can be declared and defined::
-
-            >>> x = ti.ndarray(ti.f32, shape=(16, 8))  # ndarray of shape (16, 8), each element is ti.f32 scalar.
-            >>> vec3 = ti.types.vector(3, ti.i32)
-            >>> y = ti.ndarray(vec3, shape=(10, 2))  # ndarray of shape (10, 2), each element is a vector of 3 ti.i32 scalars.
-            >>> matrix_ty = ti.types.matrix(3, 4, float)
-            >>> z = ti.ndarray(matrix_ty, shape=(4, 5))  # ndarray of shape (4, 5), each element is a matrix of (3, 4) ti.float scalars.
-    """
-    # primal
-    prog = get_runtime().prog
-    if prog is None:
-        raise TaichiRuntimeError("Cannont create ndarray, maybe you forgot to call `ti.init()` first?")
-
-    if isinstance(shape, numbers.Number):
-        shape = (shape,)
-    if not all((isinstance(x, int) or isinstance(x, np.integer)) and x > 0 and x <= 2**31 - 1 for x in shape):
-        raise TaichiRuntimeError(f"{shape} is not a valid shape for ndarray")
-    if dtype in all_types:
-        dt = cook_dtype(dtype)
-        x = ScalarNdarray(dt, shape)
-    elif isinstance(dtype, MatrixType):
-        if dtype.ndim == 1:
-            x = VectorNdarray(dtype.n, dtype.dtype, shape)
-        else:
-            x = MatrixNdarray(dtype.n, dtype.m, dtype.dtype, shape)
-        dt = dtype.dtype
-    else:
-        raise TaichiRuntimeError(f"{dtype} is not supported as ndarray element type")
-    if needs_grad:
-        if not _ti_core.is_real(dt):
-            raise TaichiRuntimeError(f"{dt} is not supported for ndarray with `needs_grad=True` or `needs_dual=True`.")
-        x_grad = ndarray(dtype, shape, needs_grad=False)
-        x._set_grad(x_grad)
-    return x
 
 
 @taichi_scope
@@ -1038,21 +542,6 @@ def one(x):
     return zero(x) + 1
 
 
-def axes(*x: Iterable[int]):
-    """Defines a list of axes to be used by a field.
-
-    Args:
-        *x: A list of axes to be activated
-
-    Note that Taichi has already provided a set of commonly used axes. For example,
-    `ti.ij` is just `axes(0, 1)` under the hood.
-    """
-    return [_ti_core.Axis(i) for i in x]
-
-
-Axis = _ti_core.Axis
-
-
 def static(x, *xs) -> Any:
     """Evaluates a Taichi-scope expression at compile time.
 
@@ -1124,8 +613,6 @@ def static(x, *xs) -> Any:
 
     if isinstance(x, AnyArray):
         return x
-    if isinstance(x, Field):
-        return x
     if isinstance(x, (FunctionType, MethodType)):
         return x
     raise ValueError(f"Input to ti.static must be compile-time constants or global pointers, instead of {type(x)}")
@@ -1157,15 +644,6 @@ def grouped(x):
     return x
 
 
-def stop_grad(x):
-    """Stops computing gradients during back propagation.
-
-    Args:
-        x (:class:`~taichi.Field`): A field.
-    """
-    get_runtime().compiling_callable.ast_builder().stop_grad(x.snode.ptr)
-
-
 def current_cfg():
     return get_runtime().prog.config()
 
@@ -1193,16 +671,10 @@ def mesh_relation_access(mesh, from_index, to_element_type):
 
 
 __all__ = [
-    "axes",
-    "deactivate_all_snodes",
-    "field",
     "grouped",
-    "ndarray",
     "one",
-    "root",
     "static",
     "static_assert",
     "static_print",
-    "stop_grad",
     "zero",
 ]

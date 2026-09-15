@@ -20,3 +20,9 @@ jobs:
         run: cmake -P cmake/CheckInfernuxJitPolicy.cmake
       - name: Check wheel output contract
         run: cmake -S tests/compiler_output -B build/output-contract
+      - name: Build and install compiler output fixture
+        run: |
+          cmake --build build/output-contract --config Release
+          cmake --install build/output-contract --config Release --prefix build/output-contract/staged --component infernux_compiler
+      - name: Verify private namespace and attribution
+        run: cmake -DINSTALL_ROOT=build/output-contract/staged -P tests/compiler_output/check_install.cmake

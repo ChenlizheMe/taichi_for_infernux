@@ -95,11 +95,13 @@ class IRCloner : public IRVisitor {
     generic_visit(stmt);
     auto other = other_node->as<OffloadedStmt>();
 
-#define CLONE_BLOCK(B)                    \
-  if (stmt->B) {                          \
-    other->B = std::make_unique<Block>(); \
-    other_node = other->B.get();          \
-    stmt->B->accept(this);                \
+    // Infernux: OffloadedStmt::clone already owns the copied blocks. Both
+    // passes must traverse those same statements, not replace them with empty
+    // blocks and invalidate the operand map built by the first pass.
+#define CLONE_BLOCK(B)             \
+  if (stmt->B) {                   \
+    other_node = other->B.get();   \
+    stmt->B->accept(this);         \
   }
 
     CLONE_BLOCK(tls_prologue)
@@ -115,6 +117,11 @@ class IRCloner : public IRVisitor {
     CLONE_BLOCK(tls_epilogue)
 #undef CLONE_BLOCK
 
+    if (phase == replace_operand) {
+      // Captured bounds are metadata references, not dominating operands.
+      auto found = operand_map_.find(stmt->end_stmt);
+      other->end_stmt = found == operand_map_.end() ? stmt->end_stmt : found->second;
+    }
     other_node = other;
   }
 
