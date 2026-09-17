@@ -35,6 +35,8 @@ The Python AOT/graph/module tools, field-tree builders, autodiff authoring
 entry points and standalone command-line interface are removed as well.
 Standalone Taichi packaging and upstream runtime-test build entries are removed;
 the engine CMake install component remains the distribution path.
+Compiler options are local to each context and default directly to Vulkan;
+obsolete backend options and the mutable global configuration are removed.
 The ongoing integration narrows this dependency to Vulkan SPIR-V generation;
 buffer ownership, device management and execution belong to Infernux.
 This notice does not claim that the compiler-only migration is complete.

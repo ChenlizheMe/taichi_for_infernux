@@ -34,10 +34,21 @@ ti = importlib.util.module_from_spec(spec)
 sys.modules[namespace] = ti
 spec.loader.exec_module(ti)
 impl = ti.lang.impl
-configuration = impl.default_cfg()
-configuration.arch = ti.vulkan
 runtime = impl.get_runtime()
 runtime.create_program()
+assert runtime.prog.config().arch == ti.vulkan
+assert not hasattr(native, "default_compile_config")
+assert not hasattr(native, "reset_default_compile_config")
+assert not hasattr(runtime.prog.config(), "use_llvm")
+assert not hasattr(runtime.prog.config(), "device_memory_GB")
+# Local option changes cannot contaminate future compilation contexts.
+first_configuration = runtime.prog.config()
+first_configuration.fast_math = False
+fresh_program = native.Program()
+assert fresh_program.config().fast_math is True
+assert fresh_program.config().print_ir_dbg_info is False
+assert first_configuration.fast_math is False
+del first_configuration, fresh_program
 buffer_description = ti.types.external_buffer(dtype=ti.i32, ndim=1)
 
 

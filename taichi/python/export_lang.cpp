@@ -137,16 +137,6 @@ void export_lang(py::module &m) {
       .def_readwrite("debug", &CompileConfig::debug)
       .def_readwrite("cfg_optimization", &CompileConfig::cfg_optimization)
       .def_readwrite("check_out_of_bound", &CompileConfig::check_out_of_bound)
-      .def_readwrite("print_accessor_ir", &CompileConfig::print_accessor_ir)
-      .def_readwrite("use_llvm", &CompileConfig::use_llvm)
-      .def_readwrite("print_struct_llvm_ir",
-                     &CompileConfig::print_struct_llvm_ir)
-      .def_readwrite("print_kernel_llvm_ir",
-                     &CompileConfig::print_kernel_llvm_ir)
-      .def_readwrite("print_kernel_llvm_ir_optimized",
-                     &CompileConfig::print_kernel_llvm_ir_optimized)
-      .def_readwrite("print_kernel_asm", &CompileConfig::print_kernel_asm)
-      .def_readwrite("print_kernel_amdgcn", &CompileConfig::print_kernel_amdgcn)
       .def_readwrite("simplify_before_lower_access",
                      &CompileConfig::simplify_before_lower_access)
       .def_readwrite("simplify_after_lower_access",
@@ -162,24 +152,15 @@ void export_lang(py::module &m) {
                      &CompileConfig::cpu_block_dim_adaptive)
       .def_readwrite("default_gpu_block_dim",
                      &CompileConfig::default_gpu_block_dim)
-      .def_readwrite("gpu_max_reg", &CompileConfig::gpu_max_reg)
       .def_readwrite("saturating_grid_dim", &CompileConfig::saturating_grid_dim)
       .def_readwrite("max_block_dim", &CompileConfig::max_block_dim)
       .def_readwrite("cpu_max_num_threads", &CompileConfig::cpu_max_num_threads)
-      .def_readwrite("random_seed", &CompileConfig::random_seed)
-      .def_readwrite("verbose_kernel_launches",
-                     &CompileConfig::verbose_kernel_launches)
       .def_readwrite("verbose", &CompileConfig::verbose)
       .def_readwrite("demote_dense_struct_fors",
                      &CompileConfig::demote_dense_struct_fors)
-      .def_readwrite("kernel_profiler", &CompileConfig::kernel_profiler)
-      .def_readwrite("timeline", &CompileConfig::timeline)
       .def_readwrite("default_fp", &CompileConfig::default_fp)
       .def_readwrite("default_ip", &CompileConfig::default_ip)
       .def_readwrite("default_up", &CompileConfig::default_up)
-      .def_readwrite("device_memory_GB", &CompileConfig::device_memory_GB)
-      .def_readwrite("device_memory_fraction",
-                     &CompileConfig::device_memory_fraction)
       .def_readwrite("fast_math", &CompileConfig::fast_math)
       .def_readwrite("advanced_optimization",
                      &CompileConfig::advanced_optimization)
@@ -199,8 +180,6 @@ void export_lang(py::module &m) {
                      &CompileConfig::quant_opt_store_fusion)
       .def_readwrite("quant_opt_atomic_demotion",
                      &CompileConfig::quant_opt_atomic_demotion)
-      .def_readwrite("allow_nv_shader_extension",
-                     &CompileConfig::allow_nv_shader_extension)
       .def_readwrite("make_mesh_block_local",
                      &CompileConfig::make_mesh_block_local)
       .def_readwrite("mesh_localize_to_end_mapping",
@@ -216,18 +195,7 @@ void export_lang(py::module &m) {
       .def_readwrite("experimental_auto_mesh_local",
                      &CompileConfig::experimental_auto_mesh_local)
       .def_readwrite("auto_mesh_local_default_occupacy",
-                     &CompileConfig::auto_mesh_local_default_occupacy)
-      .def_readwrite("num_compile_threads", &CompileConfig::num_compile_threads)
-      .def_readwrite("vk_api_version", &CompileConfig::vk_api_version)
-      .def_readwrite("cuda_stack_limit", &CompileConfig::cuda_stack_limit);
-
-  m.def("reset_default_compile_config",
-        [&]() { default_compile_config = CompileConfig(); });
-
-  m.def(
-      "default_compile_config",
-      [&]() -> CompileConfig & { return default_compile_config; },
-      py::return_value_policy::reference);
+                     &CompileConfig::auto_mesh_local_default_occupacy);
 
   py::enum_<SNodeAccessFlag>(m, "SNodeAccessFlag", py::arithmetic())
       .value("block_local", SNodeAccessFlag::block_local)

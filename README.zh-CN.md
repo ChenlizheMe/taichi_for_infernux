@@ -28,6 +28,8 @@ CPU 计算继续使用引擎的 Numba/llvmlite 路径；引擎和适用的 Playe
 
 编译所需的纹理格式、设备能力描述已与设备操作接口分开。旧的显存分配、上传回读和命令提交实现及其构建目标已删除，这些操作只由 Infernux 执行。
 
+每个原生编译上下文使用独立的 Vulkan 配置，不再先初始化 CPU 配置再改为 GPU，也不再提供全局默认配置修改入口。已删除后端对应的失效选项同步移除。
+
 引擎侧已经接入 `inx.buffer`、`set_data/get_data`、小写 `inx.vector3`，并将 CPU `@inx.jit.compile` 与 GPU `@inx.compute.kernel`、`inx.compute.launch` 分开。这些是 Infernux 的接口，不是本仓库提供的独立 Taichi 作者 API。
 
 ## 构建与分发

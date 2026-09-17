@@ -44,6 +44,9 @@ Program backend or a process-wide singleton lifetime. Its output is just code
 and metadata: the old TIC serializer, payload hashing and execution handles are
 removed. Artifact storage remains the engine's responsibility. This does not
 make the shared Python frontend or type factory concurrently callable.
+Each native context starts with its own Vulkan compiler options. There is no
+mutable global default configuration or CPU-to-GPU initialization switch;
+options for removed execution backends are no longer exported.
 Compiler headers use texture-format and capability values without including a
 device API. The legacy allocation/transfer/command implementation and its build
 target have been removed; only Infernux performs those operations.

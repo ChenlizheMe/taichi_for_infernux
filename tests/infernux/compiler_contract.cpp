@@ -1,4 +1,5 @@
-// Infernux compiler-only contracts. Real Vulkan execution belongs to the engine.
+// Infernux compiler-only contracts. Real Vulkan execution belongs to the
+// engine.
 #include "taichi/program/program.h"
 #include "taichi/codegen/spirv/compiled_kernel_data.h"
 #include "taichi/ir/transforms.h"
@@ -25,6 +26,12 @@ using namespace taichi::lang;
 using taichi::Arch;
 
 int main() {
+  CompileConfig first_config;
+  assert(first_config.arch == Arch::vulkan);
+  assert(first_config.print_ir_dbg_info == false);
+  first_config.fast_math = false;
+  CompileConfig second_config;
+  assert(second_config.fast_math == true);
   // Independent contexts may coexist; neither owns a device, queue or runtime.
   Program first_context;
   Program second_context;
@@ -43,8 +50,10 @@ int main() {
   auto &types = TypeFactory::get_instance();
   auto *f32 = types.get_primitive_type(PrimitiveTypeID::f32);
   auto *vector3 = types.get_tensor_type({3}, f32);
-  auto *input = types.get_struct_type(
-      {{f32, "head"}, {vector3, "vector"}, {f32, "tail"}})->as<StructType>();
+  auto *input =
+      types
+          .get_struct_type({{f32, "head"}, {vector3, "vector"}, {f32, "tail"}})
+          ->as<StructType>();
   const auto [arguments, argument_bytes] =
       first_context.get_struct_type_with_data_layout(
           input, first_context.get_kernel_argument_data_layout());
@@ -59,7 +68,8 @@ int main() {
   assert(returns->elements()[0].offset == 0);
   assert(returns->elements()[1].offset == 4);
   assert(returns->elements()[2].offset == 16);
-  assert(input->elements()[1].offset == 0); // Layout never mutates source types.
+  assert(input->elements()[1].offset ==
+         0);  // Layout never mutates source types.
 
   // Output is a value, without backend discovery, runtime handles or TIC files.
   spirv::CompiledKernelData::InternalData data;
@@ -71,7 +81,8 @@ int main() {
   // Captured range bounds are metadata uses of statements in their body.
   // Both whole-root and upward use replacement must update them.
   Block root;
-  auto task = Stmt::make<OffloadedStmt>(OffloadedTaskType::range_for, Arch::vulkan, nullptr);
+  auto task = Stmt::make<OffloadedStmt>(OffloadedTaskType::range_for,
+                                        Arch::vulkan, nullptr);
   auto *offload = task->as<OffloadedStmt>();
   root.insert(std::move(task));
   auto *first = offload->body->insert(Stmt::make<ConstStmt>(TypedConstant(8)));

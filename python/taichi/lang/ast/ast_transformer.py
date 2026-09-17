@@ -1378,9 +1378,9 @@ class ASTTransformer(Builder):
             else:
                 build_stmt(ctx, node.iter)
                 if isinstance(node.iter.ptr, mesh.MeshElementField):
-                    if not _ti_core.is_extension_supported(impl.default_cfg().arch, _ti_core.Extension.mesh):
+                    if not _ti_core.is_extension_supported(impl.current_cfg().arch, _ti_core.Extension.mesh):
                         raise Exception(
-                            "Backend " + str(impl.default_cfg().arch) + " doesn't support MeshTaichi extension"
+                            "Backend " + str(impl.current_cfg().arch) + " doesn't support MeshTaichi extension"
                         )
                     return ASTTransformer.build_mesh_for(ctx, node)
                 if isinstance(node.iter.ptr, mesh.MeshRelationAccessProxy):

@@ -300,18 +300,6 @@ class PyTaichi:
     def get_current_src_info(self):
         return self.src_info_stack[-1]
 
-    def set_default_fp(self, fp):
-        assert fp in [f16, f32, f64]
-        self.default_fp = fp
-        default_cfg().default_fp = self.default_fp
-
-    def set_default_ip(self, ip):
-        assert ip in [i32, i64]
-        self.default_ip = ip
-        self.default_up = u32 if ip == i32 else u64
-        default_cfg().default_ip = self.default_ip
-        default_cfg().default_up = self.default_up
-
     def create_program(self):
         if self.prog is None:
             self.prog = _ti_core.Program()
@@ -646,10 +634,6 @@ def grouped(x):
 
 def current_cfg():
     return get_runtime().prog.config()
-
-
-def default_cfg():
-    return _ti_core.default_compile_config()
 
 
 def call_internal(name, *args, with_runtime_context=True):

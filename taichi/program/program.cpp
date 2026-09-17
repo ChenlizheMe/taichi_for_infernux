@@ -4,7 +4,6 @@
 #include "program.h"
 
 #include "taichi/ir/type_utils.h"
-#include "taichi/program/extension.h"
 #include "taichi/codegen/spirv/kernel_compiler.h"
 
 namespace taichi::lang {
@@ -40,7 +39,8 @@ std::tuple<const StructType *, size_t, size_t> apply_spirv_data_layout(
         member_size = member_alignment;
       }
     } else if (member.type->is<PointerType>()) {
-      member_size = physical_buffer_pointer ? sizeof(uint64_t) : sizeof(uint32_t);
+      member_size =
+          physical_buffer_pointer ? sizeof(uint64_t) : sizeof(uint32_t);
       member_alignment = member_size;
     } else {
       TI_ASSERT(member.type->is<PrimitiveType>());
@@ -56,32 +56,14 @@ std::tuple<const StructType *, size_t, size_t> apply_spirv_data_layout(
     alignment = align_up(alignment, sizeof(float) * 4);
     bytes = align_up(bytes, sizeof(float) * 4);
   }
-  return {
-      TypeFactory::get_instance().get_struct_type(members, layout)->as<StructType>(),
-      bytes,
-      alignment};
+  return {TypeFactory::get_instance()
+              .get_struct_type(members, layout)
+              ->as<StructType>(),
+          bytes, alignment};
 }
 }  // namespace
 
-Program::Program() {
-  TI_TRACE("Program initializing as an Infernux compiler-only context...");
-
-  auto &config = compile_config_;
-  config = default_compile_config;
-  config.arch = Arch::vulkan;
-  config.fit();
-
-  if (!is_extension_supported(config.arch, Extension::assertion)) {
-    if (config.check_out_of_bound) {
-      TI_WARN("Out-of-bound access checking is not supported on arch={}",
-              arch_name(config.arch));
-      config.check_out_of_bound = false;
-    }
-  }
-
-  TI_TRACE("Program ({}) arch={} initialized.", fmt::ptr(this),
-           arch_name(config.arch));
-}
+Program::Program() = default;
 
 std::unique_ptr<spirv::CompiledKernelData> Program::compile_kernel(
     const CompileConfig &compile_config,
