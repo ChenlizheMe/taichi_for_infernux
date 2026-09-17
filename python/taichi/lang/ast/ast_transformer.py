@@ -30,13 +30,6 @@ from ...types import annotations, buffer_type, primitive_types
 from ...types.utils import is_integral
 
 
-class _UnsupportedMeshModule:
-    def __getattr__(self, name):
-        raise TaichiSyntaxError("Infernux GPU kernels use inx.buffer; Taichi mesh fields are not supported")
-
-
-mesh = _UnsupportedMeshModule()
-
 if version_info < (3, 9):
     from astunparse import unparse
 else:
@@ -1287,61 +1280,6 @@ class ASTTransformer(Builder):
         return None
 
     @staticmethod
-    def build_mesh_for(ctx, node):
-        targets = ASTTransformer.get_for_loop_targets(node)
-        if len(targets) != 1:
-            raise TaichiSyntaxError("Mesh for should have 1 loop target, found {len(targets)}")
-        target = targets[0]
-
-        with ctx.variable_scope_guard():
-            var = expr.Expr(ctx.ast_builder.make_id_expr(""))
-            ctx.mesh = node.iter.ptr.mesh
-            assert isinstance(ctx.mesh, impl.MeshInstance)
-            mesh_idx = mesh.MeshElementFieldProxy(ctx.mesh, node.iter.ptr._type, var.ptr)
-            ctx.create_variable(target, mesh_idx)
-            ctx.ast_builder.begin_frontend_mesh_for(
-                mesh_idx.ptr,
-                ctx.mesh.mesh_ptr,
-                node.iter.ptr._type,
-                _ti_core.DebugInfo(impl.get_runtime().get_current_src_info()),
-            )
-            build_stmts(ctx, node.body)
-            ctx.mesh = None
-            ctx.ast_builder.end_frontend_mesh_for()
-        return None
-
-    @staticmethod
-    def build_nested_mesh_for(ctx, node):
-        targets = ASTTransformer.get_for_loop_targets(node)
-        if len(targets) != 1:
-            raise TaichiSyntaxError("Nested-mesh for should have 1 loop target, found {len(targets)}")
-        target = targets[0]
-
-        with ctx.variable_scope_guard():
-            ctx.mesh = node.iter.ptr.mesh
-            assert isinstance(ctx.mesh, impl.MeshInstance)
-            loop_name = node.target.id + "_index__"
-            loop_var = expr.Expr(ctx.ast_builder.make_id_expr(""))
-            ctx.create_variable(loop_name, loop_var)
-            begin = expr.Expr(0)
-            end = ti_ops.cast(node.iter.ptr.size, primitive_types.i32)
-            for_di = _ti_core.DebugInfo(ctx.get_pos_info(node))
-            ctx.ast_builder.begin_frontend_range_for(loop_var.ptr, begin.ptr, end.ptr, for_di)
-            entry_expr = _ti_core.get_relation_access(
-                ctx.mesh.mesh_ptr,
-                node.iter.ptr.from_index.ptr,
-                node.iter.ptr.to_element_type,
-                loop_var.ptr,
-            )
-            entry_expr.type_check(impl.get_runtime().prog.config())
-            mesh_idx = mesh.MeshElementFieldProxy(ctx.mesh, node.iter.ptr.to_element_type, entry_expr)
-            ctx.create_variable(target, mesh_idx)
-            build_stmts(ctx, node.body)
-            ctx.ast_builder.end_frontend_range_for()
-
-        return None
-
-    @staticmethod
     def build_For(ctx, node):
         if node.orelse:
             raise TaichiSyntaxError("'else' clause for 'for' not supported in Taichi kernels")
@@ -1377,14 +1315,6 @@ class ASTTransformer(Builder):
                 return ASTTransformer.build_range_for(ctx, node)
             else:
                 build_stmt(ctx, node.iter)
-                if isinstance(node.iter.ptr, mesh.MeshElementField):
-                    if not _ti_core.is_extension_supported(impl.current_cfg().arch, _ti_core.Extension.mesh):
-                        raise Exception(
-                            "Backend " + str(impl.current_cfg().arch) + " doesn't support MeshTaichi extension"
-                        )
-                    return ASTTransformer.build_mesh_for(ctx, node)
-                if isinstance(node.iter.ptr, mesh.MeshRelationAccessProxy):
-                    return ASTTransformer.build_nested_mesh_for(ctx, node)
                 # Struct for
                 return ASTTransformer.build_struct_for(ctx, node, is_grouped=False)
 

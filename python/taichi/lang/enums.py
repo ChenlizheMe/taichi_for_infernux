@@ -2,9 +2,6 @@
 from .._lib import core as _ti_core
 
 Layout = _ti_core.Layout
-AutodiffMode = _ti_core.AutodiffMode
-SNodeGradType = _ti_core.SNodeGradType
-Format = _ti_core.Format
 BoundaryMode = _ti_core.BoundaryMode
 
 
@@ -45,4 +42,4 @@ class DeviceCapability:
     spirv_has_no_integer_wrap_decoration = "spirv_has_no_integer_wrap_decoration"
 
 
-__all__ = ["Layout", "AutodiffMode", "SNodeGradType", "Format", "DeviceCapability"]
+__all__ = ["Layout", "DeviceCapability"]

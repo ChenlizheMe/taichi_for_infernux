@@ -22,9 +22,7 @@ package_root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
 
 def import_ti_python_core():
-    from .core import taichi_python as core
-
-    core.set_lib_dir(os.fsencode(os.path.join(package_root, "_lib", "runtime")))
+    from .core import _infernux_gpu_compiler as core
     return core
 
 

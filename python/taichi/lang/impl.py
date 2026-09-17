@@ -49,11 +49,6 @@ class _UnsupportedCompilerFeature:
 
 
 SharedArray = _UnsupportedCompilerFeature
-MeshElementFieldProxy = _UnsupportedCompilerFeature
-MeshInstance = _UnsupportedCompilerFeature
-MeshRelationAccessProxy = _UnsupportedCompilerFeature
-MeshReorderedMatrixFieldProxy = _UnsupportedCompilerFeature
-MeshReorderedScalarFieldProxy = _UnsupportedCompilerFeature
 
 
 @taichi_scope
@@ -92,10 +87,6 @@ def expr_init(rhs):
     if isinstance(rhs, _ti_core.Arch):
         return rhs
     if isinstance(rhs, _Ndrange):
-        return rhs
-    if isinstance(rhs, MeshElementFieldProxy):
-        return rhs
-    if isinstance(rhs, MeshRelationAccessProxy):
         return rhs
     if hasattr(rhs, "_data_oriented"):
         return rhs
@@ -166,7 +157,7 @@ def validate_subscript_index(value, index):
 
 
 @taichi_scope
-def subscript(ast_builder, value, *_indices, skip_reordered=False):
+def subscript(ast_builder, value, *_indices):
     dbg_info = _ti_core.DebugInfo(get_runtime().get_current_src_info())
     ast_builder = get_runtime().compiling_callable.ast_builder()
     # Directly evaluate in Python for non-Taichi types
@@ -175,8 +166,6 @@ def subscript(ast_builder, value, *_indices, skip_reordered=False):
         (
             Expr,
             AnyArray,
-            MeshElementFieldProxy,
-            MeshRelationAccessProxy,
             SharedArray,
         ),
     ):
@@ -210,21 +199,6 @@ def subscript(ast_builder, value, *_indices, skip_reordered=False):
 
     if isinstance(value, SharedArray):
         return value.subscript(*indices)
-    if isinstance(value, MeshElementFieldProxy):
-        return value.subscript(*indices)
-    if isinstance(value, MeshRelationAccessProxy):
-        return value.subscript(*indices)
-    if isinstance(value, (MeshReorderedScalarFieldProxy, MeshReorderedMatrixFieldProxy)) and not skip_reordered:
-        reordered_index = tuple(
-            [
-                Expr(
-                    ast_builder.mesh_index_conversion(
-                        value.mesh_ptr, value.element_type, Expr(indices[0]).ptr, ConvType.g2r, dbg_info
-                    )
-                )
-            ]
-        )
-        return subscript(ast_builder, value, *reordered_index, skip_reordered=True)
     if isinstance(value, AnyArray):
         return Expr(ast_builder.expr_subscript(value.ptr, indices_expr_group, dbg_info))
     assert isinstance(value, Expr)
@@ -638,20 +612,6 @@ def current_cfg():
 
 def call_internal(name, *args, with_runtime_context=True):
     return expr_init(_ti_core.insert_internal_func_call(getattr(_ti_core.InternalOp, name), make_expr_group(args)))
-
-
-def get_cuda_compute_capability():
-    return _ti_core.query_int64("cuda_compute_capability")
-
-
-@taichi_scope
-def mesh_relation_access(mesh, from_index, to_element_type):
-    # to support ti.mesh_local and access mesh attribute as field
-    if isinstance(from_index, MeshInstance):
-        return getattr(from_index, element_type_name(to_element_type))
-    if isinstance(mesh, MeshInstance):
-        return MeshRelationAccessProxy(mesh, from_index, to_element_type)
-    raise RuntimeError("Relation access should be with a mesh instance!")
 
 
 __all__ = [

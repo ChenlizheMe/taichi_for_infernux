@@ -3,13 +3,13 @@
 #include <optional>
 #include <string>
 #include <algorithm>
-#include "taichi/ir/snode.h"
 
 #include "pybind11/functional.h"
 #include "pybind11/pybind11.h"
 #include "pybind11/eigen.h"
 #include "pybind11/numpy.h"
 
+#include "taichi/ir/expr.h"
 #include "taichi/ir/expression_ops.h"
 #include "taichi/ir/frontend_ir.h"
 #include "taichi/ir/statements.h"
@@ -17,7 +17,6 @@
 #include "taichi/program/extension.h"
 #include "taichi/program/program.h"
 #include "taichi/python/export.h"
-#include "taichi/math/svd.h"
 
 namespace taichi {
 
@@ -44,12 +43,6 @@ void export_lang(py::module &m) {
   m.def("arch_name", arch_name);
   m.def("arch_from_name", arch_from_name);
 
-  py::enum_<SNodeType>(m, "SNodeType", py::arithmetic())
-#define PER_SNODE(x) .value(#x, SNodeType::x)
-#include "taichi/inc/snodes.inc.h"
-#undef PER_SNODE
-      .export_values();
-
   py::enum_<Extension>(m, "Extension", py::arithmetic())
 #define PER_EXTENSION(x) .value(#x, Extension::x)
 #include "taichi/inc/extensions.inc.h"
@@ -60,20 +53,6 @@ void export_lang(py::module &m) {
       .value("AOS", ExternalArrayLayout::kAOS)
       .value("SOA", ExternalArrayLayout::kSOA)
       .value("NULL", ExternalArrayLayout::kNull)
-      .export_values();
-
-  py::enum_<AutodiffMode>(m, "AutodiffMode", py::arithmetic())
-      .value("NONE", AutodiffMode::kNone)
-      .value("VALIDATION", AutodiffMode::kCheckAutodiffValid)
-      .value("FORWARD", AutodiffMode::kForward)
-      .value("REVERSE", AutodiffMode::kReverse)
-      .export_values();
-
-  py::enum_<SNodeGradType>(m, "SNodeGradType", py::arithmetic())
-      .value("PRIMAL", SNodeGradType::kPrimal)
-      .value("ADJOINT", SNodeGradType::kAdjoint)
-      .value("DUAL", SNodeGradType::kDual)
-      .value("ADJOINT_CHECKBIT", SNodeGradType::kAdjointCheckbit)
       .export_values();
 
   py::enum_<BoundaryMode>(m, "BoundaryMode", py::arithmetic())
@@ -197,12 +176,6 @@ void export_lang(py::module &m) {
       .def_readwrite("auto_mesh_local_default_occupacy",
                      &CompileConfig::auto_mesh_local_default_occupacy);
 
-  py::enum_<SNodeAccessFlag>(m, "SNodeAccessFlag", py::arithmetic())
-      .value("block_local", SNodeAccessFlag::block_local)
-      .value("read_only", SNodeAccessFlag::read_only)
-      .value("mesh_local", SNodeAccessFlag::mesh_local)
-      .export_values();
-
   // Export ASTBuilder
   py::class_<ASTBuilder>(m, "ASTBuilder")
       .def("make_id_expr", &ASTBuilder::make_id_expr)
@@ -211,18 +184,10 @@ void export_lang(py::module &m) {
       .def("create_print", &ASTBuilder::create_print)
       .def("begin_func", &ASTBuilder::begin_func)
       .def("end_func", &ASTBuilder::end_func)
-      .def("stop_grad", &ASTBuilder::stop_gradient)
       .def("begin_frontend_if", &ASTBuilder::begin_frontend_if)
       .def("begin_frontend_if_true", &ASTBuilder::begin_frontend_if_true)
       .def("pop_scope", &ASTBuilder::pop_scope)
       .def("begin_frontend_if_false", &ASTBuilder::begin_frontend_if_false)
-      .def("insert_deactivate", &ASTBuilder::insert_snode_deactivate)
-      .def("insert_activate", &ASTBuilder::insert_snode_activate)
-      .def("expr_snode_get_addr", &ASTBuilder::snode_get_addr)
-      .def("expr_snode_append", &ASTBuilder::snode_append)
-      .def("expr_snode_is_active", &ASTBuilder::snode_is_active)
-      .def("expr_snode_length", &ASTBuilder::snode_length)
-      .def("insert_external_func_call", &ASTBuilder::insert_external_func_call)
       .def("make_matrix_expr", &ASTBuilder::make_matrix_expr)
       .def("expr_alloca", &ASTBuilder::expr_alloca)
       .def("expr_alloca_shared_array", &ASTBuilder::expr_alloca_shared_array)
@@ -230,32 +195,19 @@ void export_lang(py::module &m) {
       .def("expr_assign", &ASTBuilder::expr_assign)
       .def("begin_frontend_range_for", &ASTBuilder::begin_frontend_range_for)
       .def("end_frontend_range_for", &ASTBuilder::pop_scope)
-      .def("begin_frontend_struct_for_on_snode",
-           &ASTBuilder::begin_frontend_struct_for_on_snode)
       .def("begin_frontend_struct_for_on_external_tensor",
            &ASTBuilder::begin_frontend_struct_for_on_external_tensor)
       .def("end_frontend_struct_for", &ASTBuilder::pop_scope)
-      .def("begin_frontend_mesh_for", &ASTBuilder::begin_frontend_mesh_for)
-      .def("end_frontend_mesh_for", &ASTBuilder::pop_scope)
       .def("begin_frontend_while", &ASTBuilder::begin_frontend_while)
       .def("insert_break_stmt", &ASTBuilder::insert_break_stmt)
       .def("insert_continue_stmt", &ASTBuilder::insert_continue_stmt)
       .def("insert_expr_stmt", &ASTBuilder::insert_expr_stmt)
       .def("insert_thread_idx_expr", &ASTBuilder::insert_thread_idx_expr)
-      .def("insert_patch_idx_expr", &ASTBuilder::insert_patch_idx_expr)
-      .def("make_texture_op_expr", &ASTBuilder::make_texture_op_expr)
       .def("expand_exprs", &ASTBuilder::expand_exprs)
-      .def("mesh_index_conversion", &ASTBuilder::mesh_index_conversion)
       .def("expr_subscript", &ASTBuilder::expr_subscript)
-      .def("sifakis_svd_f32", sifakis_svd_export<float32, int32>)
-      .def("sifakis_svd_f64", sifakis_svd_export<float64, int64>)
       .def("expr_var", &ASTBuilder::make_var)
-      .def("bit_vectorize", &ASTBuilder::bit_vectorize)
-      .def("parallelize", &ASTBuilder::parallelize)
       .def("strictly_serialize", &ASTBuilder::strictly_serialize)
-      .def("block_dim", &ASTBuilder::block_dim)
-      .def("insert_snode_access_flag", &ASTBuilder::insert_snode_access_flag)
-      .def("reset_snode_access_flag", &ASTBuilder::reset_snode_access_flag);
+      .def("block_dim", &ASTBuilder::block_dim);
 
   py::class_<DeviceCapabilityConfig>(
       m, "DeviceCapabilityConfig");  // NOLINT(bugprone-unused-raii)
@@ -341,24 +293,17 @@ void export_lang(py::module &m) {
            py::return_value_policy::reference_internal)
       .def(
           "create_kernel",
-          [](Program *program, const std::string &name,
-             AutodiffMode autodiff_mode) {
+          [](Program *program, const std::string &name) {
             py::gil_scoped_release release;
             // Publish the owning Python handle before Python AST lowering.
             // A retained error traceback must never contain a half-constructed
             // native Kernel that was deleted by a throwing constructor.
-            return program->kernel([](Kernel *) {}, name, autodiff_mode);
+            return program->kernel([](Kernel *) {}, name);
           },
           py::keep_alive<0, 1>())
       .def("compile_kernel", &Program::compile_kernel,
            py::return_value_policy::move)
       .def("get_device_caps", &Program::get_device_caps);
-
-  py::enum_<BufferFormat>(m, "Format")
-#define PER_BUFFER_FORMAT(x) .value(#x, BufferFormat::x)
-#include "taichi/inc/rhi_constants.inc.h"
-#undef PER_EXTENSION
-      ;
 
   py::class_<Kernel>(m, "Kernel")
       .def("insert_scalar_param", &Kernel::insert_scalar_param)
@@ -568,12 +513,6 @@ void export_lang(py::module &m) {
 
 #undef DEFINE_EXPRESSION_OP
 
-  m.def("make_global_load_stmt", Stmt::make<GlobalLoadStmt, Stmt *>);
-  m.def("make_global_store_stmt", Stmt::make<GlobalStoreStmt, Stmt *, Stmt *>);
-  m.def("make_frontend_assign_stmt",
-        Stmt::make<FrontendAssignStmt, const Expr &, const Expr &,
-                   const DebugInfo &>);
-
   m.def("make_arg_load_expr",
         Expr::make<ArgLoadExpression, const std::vector<int> &,
                    const DataType &, bool, bool, int, const DebugInfo &>,
@@ -587,9 +526,6 @@ void export_lang(py::module &m) {
         Expr::make<ExternalTensorExpression, const DataType &, int,
                    const std::vector<int> &, bool, int, const BoundaryMode &>);
 
-  m.def("make_external_tensor_grad_expr",
-        Expr::make<ExternalTensorExpression, Expr *>);
-
   m.def("make_rand_expr",
         Expr::make<RandExpression, const DataType &, const DebugInfo &>);
 
@@ -601,20 +537,6 @@ void export_lang(py::module &m) {
 
   m.def("make_const_expr_fp",
         Expr::make<ConstExpression, const DataType &, float64>);
-
-  m.def("make_texture_ptr_expr",
-        Expr::make<TexturePtrExpression, const std::vector<int> &, int, int,
-                   const DebugInfo &>);
-  m.def("make_rw_texture_ptr_expr",
-        Expr::make<TexturePtrExpression, const std::vector<int> &, int, int,
-                   const BufferFormat &, int, const DebugInfo &>);
-
-  auto &&texture =
-      py::enum_<TextureOpType>(m, "TextureOpType", py::arithmetic());
-  for (int t = 0; t <= (int)TextureOpType::kStore; t++)
-    texture.value(texture_op_type_name(TextureOpType(t)).c_str(),
-                  TextureOpType(t));
-  texture.export_values();
 
   auto &&bin = py::enum_<BinaryOpType>(m, "BinaryOpType", py::arithmetic());
   for (int t = 0; t <= (int)BinaryOpType::undefined; t++)
@@ -660,11 +582,6 @@ void export_lang(py::module &m) {
                : 0;
   });
 
-  m.def("get_external_tensor_needs_grad", [](const Expr &expr) {
-    TI_ASSERT(expr.is<ExternalTensorExpression>());
-    return expr.cast<ExternalTensorExpression>()->needs_grad;
-  });
-
   m.def("get_external_tensor_element_type", [](const Expr &expr) {
     TI_ASSERT(expr.is<ExternalTensorExpression>());
     auto external_tensor_expr = expr.cast<ExternalTensorExpression>();
@@ -678,21 +595,13 @@ void export_lang(py::module &m) {
   });
 
   m.def("get_external_tensor_dim", [](const Expr &expr) {
-    if (expr.is<ExternalTensorExpression>()) {
-      return expr.cast<ExternalTensorExpression>()->ndim;
-    } else if (expr.is<TexturePtrExpression>()) {
-      return expr.cast<TexturePtrExpression>()->num_dims;
-    } else {
-      TI_ASSERT(false);
-      return 0;
-    }
+    TI_ASSERT(expr.is<ExternalTensorExpression>());
+    return expr.cast<ExternalTensorExpression>()->ndim;
   });
 
   m.def("get_external_tensor_shape_along_axis",
         Expr::make<ExternalTensorShapeAlongAxisExpression, const Expr &, int,
                    const DebugInfo &>);
-
-  m.def("set_lib_dir", [&](const std::string &dir) { compiled_lib_dir = dir; });
 
   m.def("get_commit_hash", get_commit_hash);
   m.def("get_version_string", get_version_string);

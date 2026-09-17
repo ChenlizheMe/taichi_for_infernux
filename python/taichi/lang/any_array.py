@@ -34,14 +34,8 @@ class AnyArray:
 
     def get_type(self):
         return BufferTypeMetadata(
-            _ti_core.get_external_tensor_element_type(self.ptr), None, _ti_core.get_external_tensor_needs_grad(self.ptr)
+            _ti_core.get_external_tensor_element_type(self.ptr)
         )  # AnyArray can take any shape
-
-    @property
-    @taichi_scope
-    def grad(self):
-        """Returns the gradient of this array."""
-        return AnyArray(_ti_core.make_external_tensor_grad_expr(self.ptr))
 
     @property
     @taichi_scope

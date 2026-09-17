@@ -21,12 +21,30 @@ for length in range(1, len(parts)):
     sys.modules[name] = package
 
 spec = importlib.machinery.PathFinder.find_spec(
-    namespace + "._lib.core.taichi_python", [str(frontend / "_lib/core")]
+    namespace + "._lib.core._infernux_gpu_compiler", [str(frontend / "_lib/core")]
 )
 assert spec is not None, "Staged native compiler is missing"
 native = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = native
 spec.loader.exec_module(native)
+assert native.__name__.endswith("._infernux_gpu_compiler")
+for name in (
+    "SNodeType", "SNodeGradType", "SNodeAccessFlag", "Format", "TextureOpType",
+    "AutodiffMode", "make_external_tensor_grad_expr", "get_external_tensor_needs_grad",
+    "make_texture_ptr_expr", "make_rw_texture_ptr_expr", "set_lib_dir",
+    "make_global_load_stmt", "make_global_store_stmt", "make_frontend_assign_stmt",
+):
+    assert not hasattr(native, name), f"Retired runtime binding remains: {name}"
+for name in (
+    "stop_grad", "insert_deactivate", "insert_activate", "expr_snode_get_addr",
+    "expr_snode_append", "expr_snode_is_active", "expr_snode_length",
+    "insert_external_func_call", "begin_frontend_struct_for_on_snode",
+    "begin_frontend_mesh_for", "end_frontend_mesh_for", "mesh_index_conversion",
+    "insert_patch_idx_expr", "make_texture_op_expr", "sifakis_svd_f32",
+    "sifakis_svd_f64", "bit_vectorize", "parallelize", "insert_snode_access_flag",
+    "reset_snode_access_flag",
+):
+    assert not hasattr(native.ASTBuilder, name), f"Retired AST binding remains: {name}"
 spec = importlib.util.spec_from_file_location(
     namespace, frontend / "__init__.py", submodule_search_locations=[str(frontend)]
 )
@@ -34,6 +52,12 @@ ti = importlib.util.module_from_spec(spec)
 sys.modules[namespace] = ti
 spec.loader.exec_module(ti)
 impl = ti.lang.impl
+for name in (
+    "MeshInstance", "MeshElementFieldProxy", "MeshRelationAccessProxy",
+    "MeshReorderedMatrixFieldProxy", "MeshReorderedScalarFieldProxy",
+    "mesh_relation_access", "get_cuda_compute_capability",
+):
+    assert not hasattr(impl, name), f"Retired compiler branch remains: {name}"
 runtime = impl.get_runtime()
 runtime.create_program()
 assert runtime.prog.config().arch == ti.vulkan
@@ -71,6 +95,20 @@ compiled = program.compile_kernel(program.config(), program.get_device_caps(), k
 assert compiled._infernux_spirv_tasks
 assert compiled._infernux_task_metadata
 assert all(task["threads_per_group"] > 0 for task in compiled._infernux_task_metadata)
+
+# Buffer iteration must reach its actual lowering, not an absent MeshTaichi
+# compatibility object. It remains compiler-only and does not allocate data.
+@ti.kernel
+def buffer_loop(values: buffer_description):
+    for i in values:
+        values[i] = i + 2
+
+
+loop_key = buffer_loop.ensure_compiled(buffer_description)
+loop_ir = buffer_loop.compiled_kernels[loop_key]
+loop_compiled = program.compile_kernel(program.config(), program.get_device_caps(), loop_ir)
+assert loop_compiled._infernux_spirv_tasks
+del buffer_loop, loop_ir
 assert not hasattr(runtime, 'kernels')
 assert not hasattr(affine, "grad")
 assert "Infernux.lib" not in sys.modules

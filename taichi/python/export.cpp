@@ -9,8 +9,8 @@
 
 namespace taichi {
 
-PYBIND11_MODULE(taichi_python, m) {
-  m.doc() = "taichi_python";
+PYBIND11_MODULE(_infernux_gpu_compiler, m) {
+  m.doc() = "Infernux private Python-to-SPIR-V compiler (derived from Taichi)";
 
   for (auto &kv : InterfaceHolder::get_instance()->methods) {
     kv.second(&m);

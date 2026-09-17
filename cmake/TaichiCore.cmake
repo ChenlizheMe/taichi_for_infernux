@@ -113,7 +113,7 @@ foreach (source IN LISTS TAICHI_CORE_SOURCE)
 endforeach ()
 
 if(TI_WITH_PYTHON)
-    set(CORE_WITH_PYBIND_LIBRARY_NAME taichi_python)
+    set(CORE_WITH_PYBIND_LIBRARY_NAME _infernux_gpu_compiler)
     if (NOT ANDROID)
         # NO_EXTRAS is required here to avoid llvm symbol error during build
         file(GLOB TAICHI_PYBIND_SOURCE

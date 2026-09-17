@@ -30,6 +30,8 @@ CPU 计算继续使用引擎的 Numba/llvmlite 路径；引擎和适用的 Playe
 
 每个原生编译上下文使用独立的 Vulkan 配置，不再先初始化 CPU 配置再改为 GPU，也不再提供全局默认配置修改入口。已删除后端对应的失效选项同步移除。
 
+原生绑定使用私有名称 `_infernux_gpu_compiler`，不再生成上游的 `taichi_python` 扩展。前端已删除无消费者的 SNode 操作、纹理构造、MeshTaichi 网格字段和外部函数调用绑定，也不再设置旧运行库目录。优化器共享 IR 的进一步裁剪与这一步分开验收。
+
 引擎侧已经接入 `inx.buffer`、`set_data/get_data`、小写 `inx.vector3`，并将 CPU `@inx.jit.compile` 与 GPU `@inx.compute.kernel`、`inx.compute.launch` 分开。这些是 Infernux 的接口，不是本仓库提供的独立 Taichi 作者 API。
 
 ## 构建与分发

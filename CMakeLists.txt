@@ -179,7 +179,7 @@ endif()
 
 include(cmake/InfernuxCompilerOutput.cmake)
 if(TI_WITH_PYTHON AND NOT ANDROID)
-    infernux_compiler_output(taichi_python)
+    infernux_compiler_output(_infernux_gpu_compiler)
 endif()
 
 option(TI_WITH_GRAPHVIZ "generate dependency graphs between targets" OFF)  # wheel-tag: viz

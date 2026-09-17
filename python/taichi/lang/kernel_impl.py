@@ -16,7 +16,6 @@ from .ast import (
     transform_tree,
 )
 from .ast.ast_transformer_utils import ReturnStatus
-from .enums import AutodiffMode
 from .exception import (
     TaichiRuntimeError,
     TaichiRuntimeTypeError,
@@ -396,7 +395,7 @@ class Kernel:
                 self.runtime.compiling_callable = None
                 self.kernel_cpp = None
 
-        taichi_kernel = impl.get_runtime().prog.create_kernel(kernel_name, AutodiffMode.NONE)
+        taichi_kernel = impl.get_runtime().prog.create_kernel(kernel_name)
         taichi_ast_generator(taichi_kernel)
         assert key not in self.compiled_kernels
         self.compiled_kernels[key] = taichi_kernel

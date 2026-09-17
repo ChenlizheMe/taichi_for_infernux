@@ -47,6 +47,11 @@ make the shared Python frontend or type factory concurrently callable.
 Each native context starts with its own Vulkan compiler options. There is no
 mutable global default configuration or CPU-to-GPU initialization switch;
 options for removed execution backends are no longer exported.
+The native binding is `_infernux_gpu_compiler`, a private engine module, not
+the upstream `taichi_python` extension. Unused SNode operations, texture
+constructors, mesh-field lowering and external-function-call bindings are
+removed from its frontend surface; it no longer sets an upstream runtime
+library directory. Shared optimizer IR is a separate, ongoing pruning task.
 Compiler headers use texture-format and capability values without including a
 device API. The legacy allocation/transfer/command implementation and its build
 target have been removed; only Infernux performs those operations.

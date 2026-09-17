@@ -37,6 +37,9 @@ Standalone Taichi packaging and upstream runtime-test build entries are removed;
 the engine CMake install component remains the distribution path.
 Compiler options are local to each context and default directly to Vulkan;
 obsolete backend options and the mutable global configuration are removed.
+The native binding is renamed _infernux_gpu_compiler. Unused SNode/texture,
+mesh-field and external-call frontend bindings and mesh compatibility stubs
+are removed; loading no longer configures an upstream runtime directory.
 The ongoing integration narrows this dependency to Vulkan SPIR-V generation;
 buffer ownership, device management and execution belong to Infernux.
 This notice does not claim that the compiler-only migration is complete.
