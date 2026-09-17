@@ -47,9 +47,15 @@ make the shared Python frontend or type factory concurrently callable.
 Compiler headers use texture-format and capability values without including a
 device API. The legacy allocation/transfer/command implementation and its build
 target have been removed; only Infernux performs those operations.
-Native IR dependencies and unused upstream runtime/AOT source still need further
-pruning. Disabled targets alone do not count as completed removal, and the full
-cross-platform wheel and Player release matrix is not yet validated.
+The standalone C-API, AOT module builders/loaders, CPU/LLVM/CUDA/AMDGPU/DirectX
+code generators and execution runtimes, and upstream device backends have been
+removed from source. Their legacy host/device containers are removed as well.
+This includes Python AOT/graph/module tools, field-tree builders, autodiff
+authoring entry points and the standalone Taichi command-line interface.
+The SPIR-V compiler retains shared IR and capability/format descriptions, not a
+second GPU device. Shared IR, unused UI/tools and historical tests still need
+further pruning; the complete cross-platform wheel/Player matrix is not yet
+validated.
 
 The engine integration uses `inx.buffer`, `set_data/get_data`, lowercase
 `inx.vector3`, CPU `@inx.jit.compile`, and GPU `@inx.compute.kernel` with
@@ -57,6 +63,10 @@ The engine integration uses `inx.buffer`, `set_data/get_data`, lowercase
 there is no standalone Taichi authoring API to install from this repository.
 
 ## Build integration
+
+Build through CMake and the engine's `infernux_gpu_jit_compiler` target. There is
+no standalone `setup.py`/Taichi wheel release entry point. Integration tests use
+`INFERNUX_BUILD_TESTS`; the upstream runtime test target is no longer supported.
 
 Engine contributors use the Infernux `infernux` conda environment. This
 dependency belongs at `external/taichi_for_infernux`, outside `external/plugins`.

@@ -4,7 +4,6 @@ Modified from upstream Taichi: no Blender/IPython/REPL probing, temporary
 source files, dill dependency or process-global inspect monkeypatches.
 Dynamic source publishers must register their compilation filename in
 linecache before compilation and retire it with the corresponding script.
-AOT execution does not use this JIT source lookup.
 """
 
 import inspect

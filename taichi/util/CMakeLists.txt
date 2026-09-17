@@ -5,7 +5,6 @@ add_library(taichi_util)
 target_sources(taichi_util
   PRIVATE
     bit.cpp
-    file_sequence_writer.cpp
     image_buffer.cpp
     image_io.cpp
     lang_util.cpp

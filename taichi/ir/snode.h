@@ -10,7 +10,6 @@
 
 namespace taichi::lang {
 class Program;
-class SNodeRwAccessorsBank;
 
 /**
  * Dimension (or axis) of a tensor.
@@ -113,13 +112,9 @@ class SNode {
   // Whether the path from root to |this| contains only `dense` SNodes.
   bool is_path_all_dense{true};
 
-  explicit SNode(SNodeFieldMap *snode_to_fields = nullptr,
-                 SNodeRwAccessorsBank *snode_rw_accessors_bank = nullptr);
+  explicit SNode(SNodeFieldMap *snode_to_fields = nullptr);
 
-  SNode(int depth,
-        SNodeType t,
-        SNodeFieldMap *snode_to_fields = nullptr,
-        SNodeRwAccessorsBank *snode_rw_accessors_bank = nullptr);
+  SNode(int depth, SNodeType t, SNodeFieldMap *snode_to_fields = nullptr);
 
   SNode(const SNode &);
 
@@ -345,8 +340,6 @@ class SNode {
  private:
   int snode_tree_id_{0};
   SNodeFieldMap *snode_to_fields_{nullptr};
-  SNodeRwAccessorsBank *snode_rw_accessors_bank_{
-      nullptr};  // owned by the "Program" class
 };
 
 }  // namespace taichi::lang

@@ -12,7 +12,6 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 # Suppress warnings from submodules introduced by the above symbol visibility change
 set(CMAKE_POLICY_DEFAULT_CMP0063 NEW)
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
-set(INSTALL_LIB_DIR ${CMAKE_INSTALL_PREFIX}/python/taichi/_lib)
 
 if(UNIX AND NOT APPLE)
     # Handy helper for Linux
@@ -23,13 +22,11 @@ endif()
 file(GLOB TAICHI_CORE_SOURCE
     "taichi/analysis/*.cpp" "taichi/analysis/*.h"
     "taichi/ir/*"
-    "taichi/jit/*"
     "taichi/math/*"
     "taichi/program/*"
     "taichi/struct/*"
     "taichi/system/*"
     "taichi/transforms/*"
-    "taichi/runtime/*.h" "taichi/runtime/*.cpp"
 )
 # These are value descriptions used by lowering, not a device API library.
 # Allocation, transfer, command submission and synchronization belong to Infernux.
@@ -37,18 +34,6 @@ list(APPEND TAICHI_CORE_SOURCE
     "${PROJECT_SOURCE_DIR}/taichi/rhi/arch.cpp"
     "${PROJECT_SOURCE_DIR}/taichi/rhi/device_capability.cpp")
 list(FILTER TAICHI_CORE_SOURCE EXCLUDE REGEX "/system/run_tests\\.cpp$")
-list(FILTER TAICHI_CORE_SOURCE EXCLUDE REGEX "/program/(graph_builder|sparse_matrix|sparse_solver|conjugate_gradient)\\.(cpp|h)$")
-# Infernux owns every runtime resource through inx.buffer and its RHI.  These
-# translation units implement Taichi's competing host/device containers,
-# SNode accessors, execution profiler, or CPU worker pool; none participate in
-# the private Python-to-SPIR-V compiler path.
-list(FILTER TAICHI_CORE_SOURCE EXCLUDE REGEX
-    "/program/(argpack|field_info|kernel_profiler|launch_context_builder|ndarray|parallel_executor|snode_rw_accessors_bank|texture)\\.cpp$")
-# Infernux owns the runtime JIT boundary.  The upstream JIT session is only
-# an LLVM/CUDA/AMDGPU runtime dispatch shim; all of those backends are disabled
-# for the compiler-only Vulkan path, so keeping this translation unit would
-# retain a dead LLVM-facing surface in the core target.
-list(FILTER TAICHI_CORE_SOURCE EXCLUDE REGEX "/jit/jit_session\\.cpp$")
 # Device-probe shims are intentionally not part of this source set. Vulkan
 # capability and device ownership come from the Infernux RHI; keeping the
 # optional backend directories out of the glob makes that boundary structural.
@@ -139,9 +124,9 @@ if(TI_WITH_PYTHON)
         # policy. The compiler module exports language lowering only; do not
         # carry Taichi's CLI/benchmark/device-probe/image utility surface.
         list(FILTER TAICHI_PYBIND_SOURCE EXCLUDE REGEX
-            "/export_(math|misc)\\.cpp$")
+            "/export_math\\.cpp$")
         list(FILTER TAICHI_PYBIND_SOURCE EXCLUDE REGEX
-            "/(interfaces_registry|memory_usage_monitor|snode_registry)\\.cpp$")
+            "/(interfaces_registry|memory_usage_monitor)\\.cpp$")
         pybind11_add_module(${CORE_WITH_PYBIND_LIBRARY_NAME} NO_EXTRAS ${TAICHI_PYBIND_SOURCE})
     else()
         add_library(${CORE_WITH_PYBIND_LIBRARY_NAME} SHARED)
@@ -180,12 +165,5 @@ if(TI_WITH_PYTHON)
         set_property(TARGET ${CORE_WITH_PYBIND_LIBRARY_NAME} APPEND PROPERTY LINK_FLAGS /DEBUG)
     endif ()
 
-    if (WIN32)
-        set_target_properties(${CORE_WITH_PYBIND_LIBRARY_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-                "${CMAKE_CURRENT_SOURCE_DIR}/runtimes")
-    endif ()
-
-    install(TARGETS ${CORE_WITH_PYBIND_LIBRARY_NAME}
-            RUNTIME DESTINATION ${INSTALL_LIB_DIR}/core
-            LIBRARY DESTINATION ${INSTALL_LIB_DIR}/core)
+    # Output and installation belong solely to InfernuxCompilerOutput.cmake.
 endif()

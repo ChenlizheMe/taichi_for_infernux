@@ -5,10 +5,6 @@
 #include <algorithm>
 #include "taichi/ir/snode.h"
 
-#if TI_WITH_LLVM
-#include "llvm/Config/llvm-config.h"
-#endif
-
 #include "pybind11/functional.h"
 #include "pybind11/pybind11.h"
 #include "pybind11/eigen.h"
@@ -22,16 +18,6 @@
 #include "taichi/program/program.h"
 #include "taichi/python/export.h"
 #include "taichi/math/svd.h"
-
-#if defined(TI_WITH_CUDA)
-#include "taichi/rhi/cuda/cuda_context.h"
-#endif
-
-namespace taichi::lang {
-
-std::string libdevice_path();
-
-}  // namespace taichi::lang
 
 namespace taichi {
 
@@ -307,71 +293,79 @@ void export_lang(py::module &m) {
       m, "DeviceCapabilityConfig");  // NOLINT(bugprone-unused-raii)
 
   py::class_<spirv::CompiledKernelData>(m, "CompiledKernelData")
-      .def_property_readonly("_infernux_spirv_tasks", [](const spirv::CompiledKernelData &compiled) {
-        py::list result;
-        for (const auto &task : compiled.get_internal_data().src.spirv_src)
-          result.append(py::bytes(reinterpret_cast<const char *>(task.data()),
-                                  task.size() * sizeof(uint32_t)));
-        return result;
-      })
-      .def_property_readonly("_infernux_task_metadata", [](const spirv::CompiledKernelData &compiled) {
-        using BufferType = spirv::TaskAttributes::BufferType;
-        py::list result;
-        const auto &array_accesses =
-            compiled.get_internal_data().metadata.kernel_attribs.ctx_attribs.arr_access;
-        for (const auto &task : compiled.get_internal_data().metadata.kernel_attribs.tasks_attribs) {
-          py::dict item;
-          item["name"] = task.name;
-          item["total_threads"] = task.advisory_total_num_threads;
-          item["threads_per_group"] = task.advisory_num_threads_per_group;
-          py::list bindings;
-          for (const auto &binding : task.buffer_binds) {
-            py::dict value;
-            value["binding"] = binding.binding;
-            switch (binding.buffer.type) {
-              case BufferType::Args:
-                value["resource_kind"] = "arguments";
-                value["binding_type"] = "uniform";
-                break;
-              case BufferType::ArgPack:
-                value["resource_kind"] = "argument_pack";
-                value["binding_type"] = "uniform";
-                break;
-              case BufferType::ExtArr:
-                value["resource_kind"] = "external_buffer";
-                value["binding_type"] = "storage";
-                for (const auto &[indices, access] : array_accesses) {
-                  if (indices == binding.buffer.root_id) {
-                    value["access"] = static_cast<uint32_t>(access);
+      .def_property_readonly(
+          "_infernux_spirv_tasks",
+          [](const spirv::CompiledKernelData &compiled) {
+            py::list result;
+            for (const auto &task : compiled.get_internal_data().src.spirv_src)
+              result.append(
+                  py::bytes(reinterpret_cast<const char *>(task.data()),
+                            task.size() * sizeof(uint32_t)));
+            return result;
+          })
+      .def_property_readonly(
+          "_infernux_task_metadata",
+          [](const spirv::CompiledKernelData &compiled) {
+            using BufferType = spirv::TaskAttributes::BufferType;
+            py::list result;
+            const auto &array_accesses =
+                compiled.get_internal_data()
+                    .metadata.kernel_attribs.ctx_attribs.arr_access;
+            for (const auto &task :
+                 compiled.get_internal_data()
+                     .metadata.kernel_attribs.tasks_attribs) {
+              py::dict item;
+              item["name"] = task.name;
+              item["total_threads"] = task.advisory_total_num_threads;
+              item["threads_per_group"] = task.advisory_num_threads_per_group;
+              py::list bindings;
+              for (const auto &binding : task.buffer_binds) {
+                py::dict value;
+                value["binding"] = binding.binding;
+                switch (binding.buffer.type) {
+                  case BufferType::Args:
+                    value["resource_kind"] = "arguments";
+                    value["binding_type"] = "uniform";
                     break;
-                  }
+                  case BufferType::ArgPack:
+                    value["resource_kind"] = "argument_pack";
+                    value["binding_type"] = "uniform";
+                    break;
+                  case BufferType::ExtArr:
+                    value["resource_kind"] = "external_buffer";
+                    value["binding_type"] = "storage";
+                    for (const auto &[indices, access] : array_accesses) {
+                      if (indices == binding.buffer.root_id) {
+                        value["access"] = static_cast<uint32_t>(access);
+                        break;
+                      }
+                    }
+                    break;
+                  case BufferType::Rets:
+                    value["resource_kind"] = "returns";
+                    value["binding_type"] = "storage";
+                    break;
+                  case BufferType::Root:
+                    value["resource_kind"] = "root";
+                    value["binding_type"] = "storage";
+                    break;
+                  case BufferType::GlobalTmps:
+                    value["resource_kind"] = "global_temporaries";
+                    value["binding_type"] = "storage";
+                    break;
+                  case BufferType::ListGen:
+                    value["resource_kind"] = "list_generation";
+                    value["binding_type"] = "storage";
+                    break;
                 }
-                break;
-              case BufferType::Rets:
-                value["resource_kind"] = "returns";
-                value["binding_type"] = "storage";
-                break;
-              case BufferType::Root:
-                value["resource_kind"] = "root";
-                value["binding_type"] = "storage";
-                break;
-              case BufferType::GlobalTmps:
-                value["resource_kind"] = "global_temporaries";
-                value["binding_type"] = "storage";
-                break;
-              case BufferType::ListGen:
-                value["resource_kind"] = "list_generation";
-                value["binding_type"] = "storage";
-                break;
+                value["argument_indices"] = binding.buffer.root_id;
+                bindings.append(std::move(value));
+              }
+              item["buffer_bindings"] = std::move(bindings);
+              result.append(std::move(item));
             }
-            value["argument_indices"] = binding.buffer.root_id;
-            bindings.append(std::move(value));
-          }
-          item["buffer_bindings"] = std::move(bindings);
-          result.append(std::move(item));
-        }
-        return result;
-      });
+            return result;
+          });
 
   py::class_<Program>(m, "Program")
       .def(py::init<>())
@@ -405,42 +399,50 @@ void export_lang(py::module &m) {
       .def("insert_ret", &Kernel::insert_ret)
       .def("finalize_rets", &Kernel::finalize_rets)
       .def("finalize_params", &Kernel::finalize_params)
-      .def_property_readonly("_infernux_argument_layout", [](const Kernel &kernel) {
-        if (!kernel.args_type)
-          throw std::invalid_argument("Kernel parameters must be finalized before layout export");
-        py::dict result;
-        result["size"] = kernel.args_size;
-        py::list parameters;
-        for (size_t index = 0; index < kernel.parameter_list.size(); ++index) {
-          const auto &parameter = kernel.parameter_list[index];
-          py::dict item;
-          if (parameter.is_array) {
-            item["kind"] = "external_buffer";
-            py::list shape_offsets;
-            const auto runtime_rank = parameter.total_dim - parameter.element_shape.size();
-            for (size_t axis = 0; axis < runtime_rank; ++axis) {
-              shape_offsets.append(kernel.args_type->get_element_offset(
-                  {static_cast<int>(index), 0, static_cast<int>(axis)}));
+      .def_property_readonly(
+          "_infernux_argument_layout",
+          [](const Kernel &kernel) {
+            if (!kernel.args_type)
+              throw std::invalid_argument(
+                  "Kernel parameters must be finalized before layout export");
+            py::dict result;
+            result["size"] = kernel.args_size;
+            py::list parameters;
+            for (size_t index = 0; index < kernel.parameter_list.size();
+                 ++index) {
+              const auto &parameter = kernel.parameter_list[index];
+              py::dict item;
+              if (parameter.is_array) {
+                item["kind"] = "external_buffer";
+                py::list shape_offsets;
+                const auto runtime_rank =
+                    parameter.total_dim - parameter.element_shape.size();
+                for (size_t axis = 0; axis < runtime_rank; ++axis) {
+                  shape_offsets.append(kernel.args_type->get_element_offset(
+                      {static_cast<int>(index), 0, static_cast<int>(axis)}));
+                }
+                item["shape_offsets"] = std::move(shape_offsets);
+                item["byte_offset_offset"] =
+                    kernel.args_type->get_element_offset(
+                        {static_cast<int>(index), 1});
+              } else {
+                const auto dtype = parameter.get_dtype();
+                if (dtype->is_primitive(PrimitiveTypeID::i32))
+                  item["kind"] = "int32";
+                else if (dtype->is_primitive(PrimitiveTypeID::f32))
+                  item["kind"] = "float32";
+                else
+                  throw std::invalid_argument(
+                      "Infernux kernel parameters support only int32 and "
+                      "float32 scalars");
+                item["offset"] = kernel.args_type->get_element_offset(
+                    {static_cast<int>(index)});
+              }
+              parameters.append(std::move(item));
             }
-            item["shape_offsets"] = std::move(shape_offsets);
-            item["byte_offset_offset"] = kernel.args_type->get_element_offset(
-                {static_cast<int>(index), 1});
-          } else {
-            const auto dtype = parameter.get_dtype();
-            if (dtype->is_primitive(PrimitiveTypeID::i32))
-              item["kind"] = "int32";
-            else if (dtype->is_primitive(PrimitiveTypeID::f32))
-              item["kind"] = "float32";
-            else
-              throw std::invalid_argument("Infernux kernel parameters support only int32 and float32 scalars");
-            item["offset"] = kernel.args_type->get_element_offset(
-                {static_cast<int>(index)});
-          }
-          parameters.append(std::move(item));
-        }
-        result["parameters"] = std::move(parameters);
-        return result;
-      })
+            result["parameters"] = std::move(parameters);
+            return result;
+          })
       .def(
           "ast_builder",
           [](Kernel *self) -> ASTBuilder * {
@@ -721,10 +723,6 @@ void export_lang(py::module &m) {
   m.def("get_external_tensor_shape_along_axis",
         Expr::make<ExternalTensorShapeAlongAxisExpression, const Expr &, int,
                    const DebugInfo &>);
-
-#if TI_WITH_LLVM
-  m.def("libdevice_path", libdevice_path);
-#endif
 
   m.def("set_lib_dir", [&](const std::string &dir) { compiled_lib_dir = dir; });
 

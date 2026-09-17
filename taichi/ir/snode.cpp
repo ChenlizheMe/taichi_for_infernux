@@ -5,7 +5,6 @@
 #include "taichi/ir/ir.h"
 #include "taichi/ir/statements.h"
 #include "taichi/program/program.h"
-#include "taichi/program/snode_rw_accessors_bank.h"
 
 namespace taichi::lang {
 
@@ -14,8 +13,7 @@ std::atomic<int> SNode::counter{0};
 SNode &SNode::insert_children(SNodeType t) {
   TI_ASSERT(t != SNodeType::root);
 
-  auto new_ch = std::make_unique<SNode>(depth + 1, t, snode_to_fields_,
-                                        snode_rw_accessors_bank_);
+  auto new_ch = std::make_unique<SNode>(depth + 1, t, snode_to_fields_);
   new_ch->parent = this;
   new_ch->is_path_all_dense = (is_path_all_dense && !new_ch->need_activation());
   for (int i = 0; i < taichi_max_num_indices; i++) {
@@ -180,19 +178,12 @@ Expr SNode::get_expr() const {
   return Expr(snode_to_fields_->at(this));
 }
 
-SNode::SNode(SNodeFieldMap *snode_to_fields,
-             SNodeRwAccessorsBank *snode_rw_accessors_bank)
-    : SNode(0, SNodeType::undefined, snode_to_fields, snode_rw_accessors_bank) {
+SNode::SNode(SNodeFieldMap *snode_to_fields)
+    : SNode(0, SNodeType::undefined, snode_to_fields) {
 }
 
-SNode::SNode(int depth,
-             SNodeType t,
-             SNodeFieldMap *snode_to_fields,
-             SNodeRwAccessorsBank *snode_rw_accessors_bank)
-    : depth(depth),
-      type(t),
-      snode_to_fields_(snode_to_fields),
-      snode_rw_accessors_bank_(snode_rw_accessors_bank) {
+SNode::SNode(int depth, SNodeType t, SNodeFieldMap *snode_to_fields)
+    : depth(depth), type(t), snode_to_fields_(snode_to_fields) {
   id = counter++;
   node_type_name = get_node_type_name();
   num_active_indices = 0;

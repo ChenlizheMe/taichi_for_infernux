@@ -14,7 +14,9 @@ CPU 计算继续使用引擎的 Numba/llvmlite 路径；引擎和适用的 Playe
 
 裁剪和发行集成仍在进行中。引擎构建已经能将私有 Python 前端和原生 SPIR-V 编译模块直接安装到 wheel 目录；Windows 集成测试覆盖无 GPU 设备的内核编译，以及通过 Infernux Vulkan 后端执行编译结果。
 
-当前使用的 Python 前端已移除 field/SNode 存储管理、设备数组构造和内核执行运行时。导入限定在 `Infernux._compiler.taichi` 内部，不占用公共 `taichi` 包名；矩阵、向量数值表达式和代码生成所需的 IR 继续保留。原生 IR 依赖和不再使用的上游运行时、AOT 源码仍需继续裁剪，关闭构建选项不等于删除完成。完整的多平台 wheel 与 Player 发行矩阵尚未验收。
+当前使用的 Python 前端已移除 field/SNode 存储管理、设备数组构造和内核执行运行时。导入限定在 `Infernux._compiler.taichi` 内部，不占用公共 `taichi` 包名；矩阵、向量数值表达式和代码生成所需的 IR 继续保留。
+
+独立 C-API、AOT 模块构建/加载器、CPU/LLVM/CUDA/AMDGPU/DirectX 代码生成与执行运行时、上游设备后端及旧数据容器，现已从源码删除，而非仅关闭选项。Python AOT/Graph 导出工具、Field 树构建器、自动微分作者入口及独立 Taichi 命令行也已移除。SPIR-V 编译器保留共享 IR 和能力/格式描述，不再带另一套 GPU 设备实现。共享 IR、旧 UI/工具和历史测试仍需继续裁剪；完整的多平台 wheel 与 Player 发行矩阵尚未验收。
 
 编译直接读取引擎提供的 buffer 类型描述，不再分配 NumPy 占位数组。每个入口只创建一个正向内核，自动梯度内核和类方法探测已移除。引擎的 `infernux.compute_compiler_only` 正式测试会从安装后的编译器生成 SPIR-V，不加载引擎，也不创建 GPU 设备；实际执行另由 Vulkan 集成测试覆盖。
 
@@ -29,6 +31,8 @@ CPU 计算继续使用引擎的 Numba/llvmlite 路径；引擎和适用的 Playe
 引擎侧已经接入 `inx.buffer`、`set_data/get_data`、小写 `inx.vector3`，并将 CPU `@inx.jit.compile` 与 GPU `@inx.compute.kernel`、`inx.compute.launch` 分开。这些是 Infernux 的接口，不是本仓库提供的独立 Taichi 作者 API。
 
 ## 构建与分发
+
+统一通过 CMake 和引擎的 `infernux_gpu_jit_compiler` 目标构建，不再保留独立 `setup.py`/Taichi wheel 发布入口。集成测试使用 `INFERNUX_BUILD_TESTS`，不再支持旧的上游运行时测试目标。
 
 引擎开发使用 `infernux` conda 环境。源码依赖位于 `external/taichi_for_infernux`，不再放入 `external/plugins`。
 

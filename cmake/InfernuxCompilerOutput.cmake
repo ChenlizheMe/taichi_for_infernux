@@ -24,11 +24,8 @@ function(infernux_compiler_output target)
         COMPONENT infernux_compiler
         FILES_MATCHING PATTERN "*.py"
         PATTERN "__pycache__" EXCLUDE
-        PATTERN "ad" EXCLUDE
         PATTERN "algorithms" EXCLUDE
-        PATTERN "aot" EXCLUDE
         PATTERN "examples" EXCLUDE
-        PATTERN "graph" EXCLUDE
         PATTERN "linalg" EXCLUDE
         PATTERN "math" EXCLUDE
         PATTERN "profiler" EXCLUDE
@@ -36,15 +33,11 @@ function(infernux_compiler_output target)
         PATTERN "sparse" EXCLUDE
         PATTERN "tools" EXCLUDE
         PATTERN "ui" EXCLUDE
-        PATTERN "_snode" EXCLUDE
-        PATTERN "_ti_module" EXCLUDE
         PATTERN "experimental.py" EXCLUDE
         PATTERN "misc.py" EXCLUDE
         PATTERN "quant.py" EXCLUDE
         PATTERN "_funcs.py" EXCLUDE
-        PATTERN "_kernels.py" EXCLUDE
-        PATTERN "__main__.py" EXCLUDE
-        PATTERN "_main.py" EXCLUDE)
+        PATTERN "_kernels.py" EXCLUDE)
     install(FILES "${PROJECT_SOURCE_DIR}/LICENSE" "${PROJECT_SOURCE_DIR}/NOTICE"
         DESTINATION Infernux/_compiler/licenses/taichi COMPONENT infernux_compiler)
 endfunction()
