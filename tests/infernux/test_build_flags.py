@@ -28,3 +28,36 @@ def test_windows_release_retains_optimization_flags(tmp_path, compiler, lto):
     result = subprocess.run(["cmake", "-S", str(tmp_path), "-B", str(tmp_path / "build")],
                             capture_output=True)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_private_frontend_install_excludes_retired_directories(tmp_path):
+    """An incremental checkout can retain empty dirs or stale bytecode."""
+    source = Path(__file__).resolve().parents[2] / "cmake/InfernuxCompilerOutput.cmake"
+    frontend = tmp_path / "python/taichi"
+    frontend.mkdir(parents=True)
+    (frontend / "__init__.py").write_text("", encoding="utf-8")
+    retired = ("ad", "aot", "graph", "shaders", "_snode", "_ti_module")
+    for name in retired:
+        folder = frontend / name
+        folder.mkdir()
+        # Include Python too: exclusions must not depend on extension filtering.
+        (folder / "obsolete.py").write_text("", encoding="utf-8")
+    for name in ("LICENSE", "NOTICE"):
+        (tmp_path / name).write_text(name, encoding="utf-8")
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.25)\nproject(InstallContract NONE)\n"
+        "add_library(compiler_contract INTERFACE)\n"
+        f'include("{source.as_posix()}")\n'
+        "infernux_compiler_output(compiler_contract)\n", encoding="utf-8")
+    build, install = tmp_path / "build", tmp_path / "staged"
+    for command in (
+        ["cmake", "-S", str(tmp_path), "-B", str(build)],
+        ["cmake", "--install", str(build), "--prefix", str(install),
+         "--component", "infernux_compiler"],
+    ):
+        result = subprocess.run(command, capture_output=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+    vendor = install / "Infernux/_compiler/taichi/_vendor/taichi"
+    assert (vendor / "__init__.py").is_file()
+    assert all(not (vendor / name).exists() for name in retired)
+    assert (install / "Infernux/_compiler/licenses/taichi/NOTICE").is_file()

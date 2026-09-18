@@ -8,6 +8,7 @@
 #include "taichi/program/program.h"
 #include "taichi/program/kernel.h"
 #include "taichi/ir/statements.h"
+#include "taichi/ir/analysis.h"
 #include "taichi/ir/ir.h"
 #include "taichi/util/line_appender.h"
 #include "taichi/codegen/spirv/kernel_utils.h"
@@ -1827,8 +1828,28 @@ class TaskCodegen : public IRVisitor {
     } else {
       loop_cond = ir_->ge(loop_var, extent_value);
     }
-    ir_->make_inst(spv::OpLoopMerge, merge_label, continue_label,
-                   spv::LoopControlMaskNone);
+    auto loop_control = spv::LoopControlMaskNone;
+    auto *constant_begin = for_stmt->begin->cast<ConstStmt>();
+    auto *constant_end = for_stmt->end->cast<ConstStmt>();
+    if (constant_begin && constant_end) {
+      const int64_t trips = int64_t(constant_end->val.val_int32()) -
+                            constant_begin->val.val_int32();
+      // Unroll only small leaf loops within a per-task code-growth budget.
+      // This preserves single-work-item ordering while exposing constant-index
+      // branches and array accesses to the existing SPIR-V optimizer.
+      if (trips > 0 && trips <= 8 &&
+          irpass::analysis::gather_statements(for_stmt->body.get(), [](Stmt *s) {
+            return s->is<RangeForStmt>() || s->is<WhileStmt>();
+          }).empty()) {
+        const int64_t cost =
+            trips * irpass::analysis::count_statements(for_stmt->body.get());
+        if (cost <= remaining_unroll_statements_) {
+          remaining_unroll_statements_ -= cost;
+          loop_control = spv::LoopControlUnrollMask;
+        }
+      }
+    }
+    ir_->make_inst(spv::OpLoopMerge, merge_label, continue_label, loop_control);
     ir_->make_inst(spv::OpBranchConditional, loop_cond, body_label,
                    merge_label);
 
@@ -2649,6 +2670,7 @@ class TaskCodegen : public IRVisitor {
   const KernelContextAttributes *const ctx_attribs_;  // not owned
   const std::string task_name_;
   std::vector<spirv::Label> continue_label_stack_;
+  int64_t remaining_unroll_statements_ = 4096;
   std::vector<spirv::Label> merge_label_stack_;
 
   std::unordered_set<const Stmt *> offload_loop_motion_;
@@ -2723,6 +2745,8 @@ KernelCodegen::KernelCodegen(const Params &params)
         .RegisterPass(spvtools::CreateRedundancyEliminationPass())
         .RegisterPass(spvtools::CreateCombineAccessChainsPass())
         .RegisterPass(spvtools::CreateSimplificationPass())
+        .RegisterPass(spvtools::CreateDeadBranchElimPass())
+        .RegisterPass(spvtools::CreateAggressiveDCEPass())
         .RegisterPass(spvtools::CreateSSARewritePass())
         .RegisterPass(spvtools::CreateVectorDCEPass())
         .RegisterPass(spvtools::CreateDeadInsertElimPass())

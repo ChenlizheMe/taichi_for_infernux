@@ -109,6 +109,52 @@ loop_ir = buffer_loop.compiled_kernels[loop_key]
 loop_compiled = program.compile_kernel(program.config(), program.get_device_caps(), loop_ir)
 assert loop_compiled._infernux_spirv_tasks
 del buffer_loop, loop_ir
+
+
+def loop_count(artifact):
+    import struct
+    count = 0
+    for task in artifact._infernux_spirv_tasks:
+        words = struct.unpack(f"<{len(task) // 4}I", task)
+        offset = 5
+        while offset < len(words):
+            size = words[offset] >> 16
+            assert size > 0
+            count += (words[offset] & 0xffff) == 246  # OpLoopMerge
+            offset += size
+        assert offset == len(words)
+    return count
+
+
+@ti.kernel
+def short_serial_loop(values: buffer_description):
+    for i in range(values.shape[0]):
+        total = values[i]
+        for j in range(3):
+            total = total * 7 + j
+        values[i] = total
+
+
+@ti.kernel
+def large_serial_loop(values: buffer_description):
+    for i in range(values.shape[0]):
+        total = values[i]
+        for j in range(64):
+            total = total * 7 + j
+        values[i] = total
+
+
+short_key = short_serial_loop.ensure_compiled(buffer_description)
+short_artifact = program.compile_kernel(
+    program.config(), program.get_device_caps(), short_serial_loop.compiled_kernels[short_key])
+large_key = large_serial_loop.ensure_compiled(buffer_description)
+large_artifact = program.compile_kernel(
+    program.config(), program.get_device_caps(), large_serial_loop.compiled_kernels[large_key])
+# The compiler-generated outer grid-stride loop remains in both; only the
+# short serial loop is unfolded. Do not expand large loops into giant shaders.
+assert loop_count(short_artifact) == 1
+assert loop_count(large_artifact) == 2
+del short_serial_loop, large_serial_loop
 assert not hasattr(runtime, 'kernels')
 assert not hasattr(affine, "grad")
 assert "Infernux.lib" not in sys.modules

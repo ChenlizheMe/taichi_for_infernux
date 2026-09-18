@@ -24,20 +24,39 @@ function(infernux_compiler_output target)
         COMPONENT infernux_compiler
         FILES_MATCHING PATTERN "*.py"
         PATTERN "__pycache__" EXCLUDE
+        PATTERN "ad" EXCLUDE
         PATTERN "algorithms" EXCLUDE
+        PATTERN "aot" EXCLUDE
         PATTERN "examples" EXCLUDE
+        PATTERN "graph" EXCLUDE
         PATTERN "linalg" EXCLUDE
         PATTERN "math" EXCLUDE
         PATTERN "profiler" EXCLUDE
+        PATTERN "shaders" EXCLUDE
         PATTERN "simt" EXCLUDE
         PATTERN "sparse" EXCLUDE
         PATTERN "tools" EXCLUDE
         PATTERN "ui" EXCLUDE
+        PATTERN "_snode" EXCLUDE
+        PATTERN "_ti_module" EXCLUDE
         PATTERN "experimental.py" EXCLUDE
         PATTERN "misc.py" EXCLUDE
         PATTERN "quant.py" EXCLUDE
         PATTERN "_funcs.py" EXCLUDE
         PATTERN "_kernels.py" EXCLUDE)
+    # CMake may create empty directory entries for excluded source folders when
+    # installing a directory tree. Remove those entries from the staged wheel;
+    # the wheel contract is about payload, not a nominal empty upstream tree.
+    install(CODE [[
+        set(_infernux_retired_private_dirs
+            ad algorithms aot examples graph linalg math profiler shaders simt
+            sparse tools ui _snode _ti_module)
+        foreach(_dir IN LISTS _infernux_retired_private_dirs)
+            file(REMOVE_RECURSE
+                "${CMAKE_INSTALL_PREFIX}/Infernux/_compiler/taichi/_vendor/taichi/${_dir}")
+        endforeach()
+    ]]
+        COMPONENT infernux_compiler)
     install(FILES "${PROJECT_SOURCE_DIR}/LICENSE" "${PROJECT_SOURCE_DIR}/NOTICE"
         DESTINATION Infernux/_compiler/licenses/taichi COMPONENT infernux_compiler)
 endfunction()
