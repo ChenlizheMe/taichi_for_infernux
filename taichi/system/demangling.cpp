@@ -4,13 +4,8 @@
 *******************************************************************************/
 
 #include "taichi/common/core.h"
-#include "taichi/common/task.h"
 #if !defined(_WIN64)
 #include <cxxabi.h>
-#endif
-
-#if defined(TI_PLATFORM_WINDOWS)
-#include <DbgHelp.h>
 #endif
 
 namespace taichi {
@@ -27,28 +22,12 @@ std::string cpp_demangle(const std::string &mangled_name) {
   free(demangled_name);
   return ret;
 #elif defined(TI_PLATFORM_WINDOWS)
-  PCSTR mangled = mangled_name.c_str();
-  char demangled[1024];
-  DWORD length =
-      UnDecorateSymbolName(mangled, demangled, 1024, UNDNAME_NAME_ONLY);
-  return std::string(demangled, size_t(length));
+  // Compiler diagnostics do not justify loading the Windows symbol engine.
+  // Keep the original RTTI name; the error still identifies the statement.
+  return mangled_name;
 #else
   TI_NOT_IMPLEMENTED
 #endif
 }
-
-class Demangling : public Task {
-  std::string run(const std::vector<std::string> &parameters) override {
-    if (parameters.size() == 0) {
-      printf("There should be at least one parameter for demangling.\n");
-    }
-    for (auto p : parameters) {
-      printf("Demangled C++ Identifier: %s\n", cpp_demangle(p).c_str());
-    }
-    return "";
-  }
-};
-
-TI_IMPLEMENTATION(Task, Demangling, "demangle")
 
 }  // namespace taichi

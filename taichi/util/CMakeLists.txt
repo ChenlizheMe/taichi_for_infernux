@@ -5,12 +5,9 @@ add_library(taichi_util)
 target_sources(taichi_util
   PRIVATE
     bit.cpp
-    image_buffer.cpp
-    image_io.cpp
     lang_util.cpp
     short_name.cpp
     str.cpp
-    zip.cpp
   )
 
 target_include_directories(taichi_util

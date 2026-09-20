@@ -1,6 +1,7 @@
 #pragma once
 
 #include "taichi/codegen/spirv/kernel_utils.h"
+#include "taichi/rhi/device_capability.h"
 
 namespace taichi::lang {
 
@@ -16,6 +17,9 @@ class CompiledKernelData final {
     // meta data
     struct Metadata {
       TaichiKernelAttributes kernel_attribs;
+      // Exact target contract used while producing the module.  This is
+      // compiler output metadata only; it never owns or probes a device.
+      DeviceCapabilityConfig required_capabilities;
     } metadata;
     // source code
     struct Source {

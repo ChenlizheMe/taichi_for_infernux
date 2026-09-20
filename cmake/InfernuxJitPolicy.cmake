@@ -13,3 +13,9 @@ foreach(feature TESTS EXAMPLES RHI_EXAMPLES)
     endif()
 endforeach()
 option(TI_WITH_PYTHON "Build the internal JIT compiler binding" ON)
+
+# The compiler is loaded only through its Python module initializer.  None of
+# the upstream C++ classes form an engine ABI, so exporting them from the pyd
+# would keep a second, accidental SDK alive and defeat the closed compiler
+# boundary.  PYBIND11_MODULE exports PyInit__infernux_gpu_compiler itself.
+add_compile_definitions(TI_INFERNUX_PRIVATE_COMPILER=1)

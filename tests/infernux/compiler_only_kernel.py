@@ -95,6 +95,10 @@ compiled = program.compile_kernel(program.config(), program.get_device_caps(), k
 assert compiled._infernux_spirv_tasks
 assert compiled._infernux_task_metadata
 assert all(task["threads_per_group"] > 0 for task in compiled._infernux_task_metadata)
+assert all(task["entry_point"] == task["name"] for task in compiled._infernux_task_metadata)
+assert all(tuple(task["workgroup_size"]) == (task["threads_per_group"], 1, 1)
+           for task in compiled._infernux_task_metadata)
+assert compiled._infernux_required_capabilities == {"spirv_version": 0x10300}
 
 # Buffer iteration must reach its actual lowering, not an absent MeshTaichi
 # compatibility object. It remains compiler-only and does not allocate data.

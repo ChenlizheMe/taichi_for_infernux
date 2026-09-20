@@ -9,8 +9,13 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
+// Infernux embeds this code in one private Python compiler module.  The module
+// initializer is exported by pybind11; its internal C++ implementation is not
+// a public ABI and must remain hidden.
+#if defined(TI_INFERNUX_PRIVATE_COMPILER)
+#define TI_DLL_EXPORT
 // https://gcc.gnu.org/wiki/Visibility
-#if defined _WIN32 || defined _WIN64 || defined __CYGWIN__
+#elif defined _WIN32 || defined _WIN64 || defined __CYGWIN__
 #ifdef __GNUC__
 #define TI_DLL_EXPORT __attribute__((dllexport))
 #else

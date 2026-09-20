@@ -19,24 +19,122 @@ if(UNIX AND NOT APPLE)
     set(LINUX TRUE)
 endif()
 
-file(GLOB TAICHI_CORE_SOURCE
-    "taichi/analysis/*.cpp" "taichi/analysis/*.h"
-    "taichi/ir/*"
-    "taichi/math/*"
-    "taichi/program/*"
-    "taichi/struct/*"
-    "taichi/system/*"
-    "taichi/transforms/*"
-)
-# These are value descriptions used by lowering, not a device API library.
-# Allocation, transfer, command submission and synchronization belong to Infernux.
-list(APPEND TAICHI_CORE_SOURCE
+# This is an intentionally closed compiler source set.  Do not replace it with
+# directory globs: the upstream directories also contain execution runtimes,
+# registries, signal handlers, profiling UI, SNode layout managers, and other
+# facilities that are not part of Python AST -> SPIR-V compilation.
+set(TAICHI_CORE_SOURCE
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/alias_analysis.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/arithmetic_interpretor.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/bls_analyzer.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/build_cfg.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/check_fields_registered.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/clone.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/constexpr_propagation.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/count_statements.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/data_source_analysis.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/detect_fors_with_break.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/gather_deactivations.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/gather_dynamically_indexed_pointers.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/gather_func_store_dests.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/gather_immutable_local_vars.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/gather_mesh_thread_local.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/gather_meshfor_relation_types.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/gather_snode_read_writes.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/gather_statement_usages.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/gather_statements.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/gather_uniquely_accessed_pointers.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/gather_used_atomics.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/has_store_or_atomic.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/last_store_or_atomic.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/mesh_bls_analyzer.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/same_statements.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/value_diff.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/analysis/verify.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/basic_stmt_visitor.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/control_flow_graph.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/expr.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/expression_ops.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/frontend_ir.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/ir_builder.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/ir.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/mesh.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/offloaded_task_type.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/pass.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/scratch_pad.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/snode_types.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/snode.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/statements.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/stmt_op_types.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/type_factory.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/type_system.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/type_utils.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/ir/type.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/program/callable.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/program/compile_config.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/program/extension.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/program/function_key.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/program/function.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/program/kernel.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/program/program.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/program/snode_expr_utils.cpp"
     "${PROJECT_SOURCE_DIR}/taichi/rhi/arch.cpp"
-    "${PROJECT_SOURCE_DIR}/taichi/rhi/device_capability.cpp")
-list(FILTER TAICHI_CORE_SOURCE EXCLUDE REGEX "/system/run_tests\\.cpp$")
-# Device-probe shims are intentionally not part of this source set. Vulkan
-# capability and device ownership come from the Infernux RHI; keeping the
-# optional backend directories out of the glob makes that boundary structural.
+    "${PROJECT_SOURCE_DIR}/taichi/rhi/device_capability.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/system/demangling.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/system/profiler.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/system/timer.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/alg_simp.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/auto_diff.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/binary_op_simplify.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/bit_loop_vectorize.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/cache_loop_invariant_global_vars.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/cfg_optimization.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/check_out_of_bound.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/compile_taichi_functions.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/compile_to_offloads.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/constant_fold.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/demote_atomics.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/demote_dense_struct_fors.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/demote_mesh_statements.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/demote_no_access_mesh_fors.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/demote_operations.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/detect_read_only.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/determine_ad_stack_size.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/die.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/eliminate_immutable_local_vars.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/extract_constant.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/flag_access.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/frontend_type_check.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/handle_external_ptr_boundary.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/inlining.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/insert_scratch_pad.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/ir_printer.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/loop_invariant_code_motion.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/lower_access.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/lower_ast.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/lower_matrix_ptr.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/make_block_local.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/make_cpu_multithreaded_range_for.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/make_mesh_block_local.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/make_mesh_thread_local.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/make_thread_local.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/offload.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/optimize_bit_struct_stores.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/re_id.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/remove_assume_in_range.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/remove_loop_unique.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/replace_statements.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/reverse_segments.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/scalar_pointer_lowerer.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/scalarize.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/simplify.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/statement_usage_replace.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/transform_statements.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/type_check.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/unreachable_code_elimination.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/utils.cpp"
+    "${PROJECT_SOURCE_DIR}/taichi/transforms/whole_kernel_cse.cpp"
+)
 
 set(CORE_LIBRARY_NAME taichi_core)
 add_library(${CORE_LIBRARY_NAME} OBJECT ${TAICHI_CORE_SOURCE})
@@ -116,17 +214,12 @@ if(TI_WITH_PYTHON)
     set(CORE_WITH_PYBIND_LIBRARY_NAME _infernux_gpu_compiler)
     if (NOT ANDROID)
         # NO_EXTRAS is required here to avoid llvm symbol error during build
-        file(GLOB TAICHI_PYBIND_SOURCE
-            "taichi/python/*.cpp"
-            "taichi/python/*.h"
+        set(TAICHI_PYBIND_SOURCE
+            "${PROJECT_SOURCE_DIR}/taichi/python/exception.cpp"
+            "${PROJECT_SOURCE_DIR}/taichi/python/export.cpp"
+            "${PROJECT_SOURCE_DIR}/taichi/python/export_lang.cpp"
+            "${PROJECT_SOURCE_DIR}/taichi/python/py_exception_translator.cpp"
         )
-        # Infernux owns diagnostics, math values, profiling and environment
-        # policy. The compiler module exports language lowering only; do not
-        # carry Taichi's CLI/benchmark/device-probe/image utility surface.
-        list(FILTER TAICHI_PYBIND_SOURCE EXCLUDE REGEX
-            "/export_math\\.cpp$")
-        list(FILTER TAICHI_PYBIND_SOURCE EXCLUDE REGEX
-            "/(interfaces_registry|memory_usage_monitor)\\.cpp$")
         pybind11_add_module(${CORE_WITH_PYBIND_LIBRARY_NAME} NO_EXTRAS ${TAICHI_PYBIND_SOURCE})
     else()
         add_library(${CORE_WITH_PYBIND_LIBRARY_NAME} SHARED)

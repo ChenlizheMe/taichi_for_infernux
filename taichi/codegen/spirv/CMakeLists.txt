@@ -5,7 +5,6 @@ add_library(spirv_codegen)
 target_sources(spirv_codegen
   PRIVATE
     kernel_utils.cpp
-    snode_struct_compiler.cpp
     spirv_codegen.cpp
     spirv_ir_builder.cpp
     spirv_types.cpp

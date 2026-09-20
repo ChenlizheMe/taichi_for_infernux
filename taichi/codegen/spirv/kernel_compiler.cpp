@@ -34,6 +34,7 @@ KernelCompiler::CKDPtr KernelCompiler::compile(
   params.enable_spv_opt = compile_config.external_optimization_level > 0;
   spirv::KernelCodegen codegen(params);
   spirv::CompiledKernelData::InternalData internal_data;
+  internal_data.metadata.required_capabilities = device_caps;
   codegen.run(internal_data.metadata.kernel_attribs,
               internal_data.src.spirv_src);
   return std::make_unique<CompiledKernelData>(std::move(internal_data));

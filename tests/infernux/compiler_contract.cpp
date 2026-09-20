@@ -74,9 +74,13 @@ int main() {
   // Output is a value, without backend discovery, runtime handles or TIC files.
   spirv::CompiledKernelData::InternalData data;
   data.src.spirv_src = {{0x07230203u, 0, 0, 0, 0}};
+  data.metadata.required_capabilities = caps;
   spirv::CompiledKernelData output(data);
   data.src.spirv_src.clear();
   assert(output.get_internal_data().src.spirv_src.size() == 1);
+  assert(output.get_internal_data()
+             .metadata.required_capabilities.get(
+                 DeviceCapability::spirv_version) == 0x10300);
 
   // Captured range bounds are metadata uses of statements in their body.
   // Both whole-root and upward use replacement must update them.

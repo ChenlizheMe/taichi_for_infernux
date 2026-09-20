@@ -236,8 +236,11 @@ void export_lang(py::module &m) {
                      .metadata.kernel_attribs.tasks_attribs) {
               py::dict item;
               item["name"] = task.name;
+              item["entry_point"] = task.name;
               item["total_threads"] = task.advisory_total_num_threads;
               item["threads_per_group"] = task.advisory_num_threads_per_group;
+              item["workgroup_size"] = py::make_tuple(
+                  task.advisory_num_threads_per_group, 1, 1);
               py::list bindings;
               for (const auto &binding : task.buffer_binds) {
                 py::dict value;
@@ -283,6 +286,17 @@ void export_lang(py::module &m) {
               }
               item["buffer_bindings"] = std::move(bindings);
               result.append(std::move(item));
+            }
+            return result;
+          })
+      .def_property_readonly(
+          "_infernux_required_capabilities",
+          [](const spirv::CompiledKernelData &compiled) {
+            py::dict result;
+            for (const auto &[capability, level] :
+                 compiled.get_internal_data()
+                     .metadata.required_capabilities.to_inner()) {
+              result[py::str(to_string(capability))] = level;
             }
             return result;
           });
