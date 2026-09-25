@@ -70,6 +70,19 @@ The engine integration uses `inx.buffer`, `set_data/get_data`, lowercase
 `inx.compute.launch`. Those APIs belong to Infernux, not to this dependency;
 there is no standalone Taichi authoring API to install from this repository.
 
+## Platform contract
+
+Taichi compilation is a host/editor capability, while the generated compute
+artifact is a Player capability. Windows and Linux desktop builds may carry
+the Infernux CPU/GPU JIT tools and compile Vulkan SPIR-V kernels. Android
+Players use Vulkan/AOT compute: kernels are compiled during Cook on a desktop
+host, and the device does not carry or execute Numba, llvmlite, or the Taichi
+compiler. Web Players use ordinary no-JIT Python and WebGPU; they do not ship
+a Python-to-WebGPU kernel compiler. CPU-JIT source is lowered to ordinary
+Python during Cook, while direct GPU-kernel declarations are rejected during
+the Web build. None of these targets install a separate Taichi package or
+project plugin.
+
 ## Build integration
 
 Build through CMake and the engine's `infernux_gpu_jit_compiler` target. There is

@@ -34,6 +34,10 @@ CPU 计算继续使用引擎的 Numba/llvmlite 路径；引擎和适用的 Playe
 
 引擎侧已经接入 `inx.buffer`、`set_data/get_data`、小写 `inx.vector3`，并将 CPU `@inx.jit.compile` 与 GPU `@inx.compute.kernel`、`inx.compute.launch` 分开。这些是 Infernux 的接口，不是本仓库提供的独立 Taichi 作者 API。
 
+## 平台契约
+
+Taichi 的编译是主机/编辑器能力，生成后的计算制品才是 Player 能力。Windows 和 Linux 桌面版可以携带 Infernux 的 CPU/GPU JIT 工具，并把内核编译为 Vulkan SPIR-V。Android Player 使用 Vulkan/AOT 计算：内核在桌面主机的 Cook 阶段编译，设备端不携带也不执行 Numba、llvmlite 或 Taichi 编译器。Web Player 使用普通 no-JIT Python 和 WebGPU，不携带 Python 到 WebGPU 的内核编译器；CPU JIT 源码会在 Cook 阶段降为普通 Python，直接声明 GPU kernel 则在 Web 构建阶段拒绝。以上平台都不安装独立 Taichi 包，也不需要项目插件。
+
 ## 构建与分发
 
 统一通过 CMake 和引擎的 `infernux_gpu_jit_compiler` 目标构建，不再保留独立 `setup.py`/Taichi wheel 发布入口。集成测试使用 `INFERNUX_BUILD_TESTS`，不再支持旧的上游运行时测试目标。
